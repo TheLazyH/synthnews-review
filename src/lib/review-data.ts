@@ -1,0 +1,86 @@
+import { sql } from "@/lib/db";
+import type { Progress, ReviewItem } from "@/lib/types";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+type Row = Record<string, any>;
+
+function toItem(row: Row): ReviewItem {
+  return {
+    id: row.id,
+    position: row.position,
+    payload: row.payload,
+    review: row.review_id
+      ? {
+          relation: row.relation,
+          is_opinion: row.is_opinion,
+          confidence: row.confidence,
+          skipped: row.skipped,
+          skip_reason: row.skip_reason,
+          note: row.note,
+        }
+      : null,
+  };
+}
+
+export async function getList(slug: string) {
+  const rows = await sql`
+    SELECT id, slug, title, description, guide_md, status
+    FROM lists WHERE slug = ${slug}
+  `;
+  return rows[0] ?? null;
+}
+
+export async function getProgress(listId: string, reviewerId: string): Promise<Progress> {
+  const rows = await sql`
+    SELECT count(i.id)::int AS total,
+           (count(r.id) FILTER (WHERE NOT r.skipped))::int AS answered,
+           (count(r.id) FILTER (WHERE r.skipped))::int AS skipped
+    FROM items i
+    LEFT JOIN reviews r ON r.item_id = i.id AND r.reviewer_id = ${reviewerId}
+    WHERE i.list_id = ${listId}
+  `;
+  return rows[0] as Progress;
+}
+
+export async function nextItem(
+  listId: string,
+  reviewerId: string,
+  mode: "new" | "skipped",
+): Promise<ReviewItem | null> {
+  const rows =
+    mode === "new"
+      ? await sql`
+          SELECT i.id, i.position, i.payload, NULL AS review_id
+          FROM items i
+          LEFT JOIN reviews r ON r.item_id = i.id AND r.reviewer_id = ${reviewerId}
+          WHERE i.list_id = ${listId} AND r.id IS NULL
+          ORDER BY i.position
+          LIMIT 1
+        `
+      : await sql`
+          SELECT i.id, i.position, i.payload, r.id AS review_id, r.relation, r.is_opinion,
+                 r.confidence, r.skipped, r.skip_reason, r.note
+          FROM items i
+          JOIN reviews r ON r.item_id = i.id AND r.reviewer_id = ${reviewerId}
+          WHERE i.list_id = ${listId} AND r.skipped
+          ORDER BY r.updated_at
+          LIMIT 1
+        `;
+  return rows[0] ? toItem(rows[0]) : null;
+}
+
+export async function getItem(itemId: string, reviewerId: string): Promise<ReviewItem | null> {
+  const rows = await sql`
+    SELECT i.id, i.position, i.payload, r.id AS review_id, r.relation, r.is_opinion,
+           r.confidence, r.skipped, r.skip_reason, r.note
+    FROM items i
+    LEFT JOIN reviews r ON r.item_id = i.id AND r.reviewer_id = ${reviewerId}
+    WHERE i.id = ${itemId}
+  `;
+  return rows[0] ? toItem(rows[0]) : null;
+}
