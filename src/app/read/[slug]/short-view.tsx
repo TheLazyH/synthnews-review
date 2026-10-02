@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +44,28 @@ function wordCount(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+function hueOf(text: string) {
+  let h = 0;
+  for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
+function coverStyles(category: string | null): {
+  tint?: CSSProperties;
+  ink?: CSSProperties;
+} {
+  if (!category) return {};
+  const h = hueOf(category);
+  return {
+    tint: {
+      backgroundColor: `color-mix(in oklab, hsl(${h} 70% 50%) 14%, transparent)`,
+    },
+    ink: {
+      color: `color-mix(in oklab, hsl(${h} 70% 45%) 70%, currentColor)`,
+    },
+  };
+}
+
 export default function ShortView({
   item,
   saved,
@@ -75,6 +97,8 @@ export default function ShortView({
   }, []);
 
   const marking = issues.includes("not_in_sources");
+  const chips = domainChips(sources);
+  const cover = coverStyles(category);
   const savedLabel = saved
     ? VERDICTS.find((v) => v.value === saved.verdict)?.label
     : null;
@@ -155,65 +179,84 @@ export default function ShortView({
 
   return (
     <>
-      <article className="space-y-4 rounded-lg border bg-background p-6 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          {category && (
-            <Badge variant="secondary" className="capitalize">
-              {category}
-            </Badge>
-          )}
-          <span className="text-xs text-muted-foreground">
-            Updated {item.updated} IST
+      <article className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+        <div
+          className={`flex aspect-[16/7] flex-col justify-end gap-1 p-5 sm:p-6 ${
+            cover.tint ? "" : "bg-muted"
+          }`}
+          style={cover.tint}
+        >
+          <span
+            className="text-3xl font-semibold capitalize tracking-tight sm:text-4xl"
+            style={cover.ink}
+          >
+            {category ?? "News"}
           </span>
-        </div>
-        <h2 className="text-2xl font-semibold leading-tight">{headline}</h2>
-        <p className="text-[1.05rem] leading-relaxed text-foreground/90">
-          {sentences.map((sentence, n) => (
-            <span key={n}>
-              {n > 0 && " "}
-              {marking ? (
-                <button
-                  type="button"
-                  aria-pressed={badSentences.includes(n)}
-                  onClick={() => toggleSentence(n)}
-                  className={`inline rounded text-left underline-offset-4 ${
-                    badSentences.includes(n)
-                      ? "bg-red-500/10 underline decoration-red-500 decoration-2"
-                      : "hover:bg-muted"
-                  }`}
-                >
-                  {sentence}
-                </button>
-              ) : (
-                sentence
-              )}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>Updated {item.updated} IST</span>
+            <span>
+              {chips.length} {chips.length === 1 ? "source" : "sources"}
             </span>
-          ))}
-        </p>
-        {marking && (
-          <p className="text-xs text-muted-foreground">
-            Tap each sentence the sources don&apos;t support.
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5 sm:p-6">
+          <h2 className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
+            {headline}
+          </h2>
+          <p className="max-w-prose text-[1.0625rem] leading-7 text-foreground/85">
+            {sentences.map((sentence, n) => (
+              <span key={n}>
+                {n > 0 && " "}
+                {marking ? (
+                  <button
+                    type="button"
+                    aria-pressed={badSentences.includes(n)}
+                    onClick={() => toggleSentence(n)}
+                    className={`inline rounded text-left underline-offset-4 ${
+                      badSentences.includes(n)
+                        ? "bg-red-500/10 underline decoration-red-500 decoration-2"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    {sentence}
+                  </button>
+                ) : (
+                  sentence
+                )}
+              </span>
+            ))}
           </p>
-        )}
-        <div className="flex flex-wrap gap-2 border-t pt-4">
-          {domainChips(sources).map((s) => (
-            <a
-              key={s.source}
-              href={s.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={s.title}
-              className="rounded-full border px-3 py-1 text-xs font-medium transition hover:bg-muted"
-            >
-              {s.source} ↗
-            </a>
-          ))}
+          {marking && (
+            <p className="text-xs text-muted-foreground">
+              Tap each sentence the sources don&apos;t support.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+            {chips.map((s) => (
+              <a
+                key={s.source}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={s.title}
+                className="rounded-full border px-3 py-1 text-xs font-medium transition hover:bg-muted"
+              >
+                {s.source} ↗
+              </a>
+            ))}
+            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+              {wordCount(original)} words
+            </span>
+          </div>
         </div>
       </article>
 
-      <section className="space-y-4 rounded-lg border bg-background p-5 shadow-sm">
+      <section className="space-y-4 rounded-xl border bg-background/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium">How is this short?</p>
+          <p className="text-sm font-medium text-muted-foreground">
+            How is this short?
+          </p>
           {saved && !touched && (
             <span className="text-sm text-emerald-700 dark:text-emerald-400">
               Saved: {savedLabel}
