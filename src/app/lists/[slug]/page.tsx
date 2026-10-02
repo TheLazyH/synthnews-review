@@ -13,6 +13,7 @@ export default async function ListPage({
   const { slug } = await params;
   const session = await getSession();
   const list = await getList(slug);
+  if (!list || !session || list.kind !== "pair") notFound();
   if (!list || !session) notFound();
   const progress = await getProgress(list.id, session.sub);
   const done = progress.answered + progress.skipped;

@@ -31,6 +31,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: PREFS_SCRIPT }} />
       </head>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-muted/50 text-foreground antialiased`}
       >
         {children}

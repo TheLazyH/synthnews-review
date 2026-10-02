@@ -36,9 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     : null;
 
   const lists = await sql`
-    SELECT l.status FROM items i JOIN lists l ON l.id = i.list_id WHERE i.id = ${id}
+    SELECT l.status, l.kind FROM items i JOIN lists l ON l.id = i.list_id WHERE i.id = ${id}
   `;
-  if (!lists[0]) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!lists[0] || lists[0].kind !== "pair") return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (lists[0].status !== "open") return NextResponse.json({ error: "list_closed" }, { status: 409 });
 
   await sql`

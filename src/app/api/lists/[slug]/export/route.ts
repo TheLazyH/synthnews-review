@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { slug } = await params;
   const list = await getList(slug);
-  if (!list) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!list || list.kind !== "pair") return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const rows = await sql`
     SELECT i.external_id, i.position, i.payload, r.relation, r.is_opinion, r.confidence,
