@@ -93,6 +93,10 @@ export default function Reader({
     );
   }, [category, item]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [item?.id]);
+
   function changeCategory(next: string) {
     const nextVisible = next
       ? items.filter((i) => i.payload.category === next)
@@ -103,7 +107,7 @@ export default function Reader({
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-5 p-4 pr-20 md:p-6 md:pr-24">
+    <main className="mx-auto max-w-2xl space-y-5 p-4 pb-32 md:p-6 md:pb-24 md:pr-24">
       <header className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-sm">
           <Link href="/read" className="underline">
@@ -146,11 +150,12 @@ export default function Reader({
 
       <nav
         aria-label="Move between shorts"
-        className="fixed bottom-6 right-4 flex flex-col gap-2 md:bottom-auto md:right-8 md:top-1/2 md:-translate-y-1/2"
+        className="fixed bottom-4 left-4 z-40 flex flex-row gap-1 rounded-full border bg-background/90 p-1 shadow-sm backdrop-blur md:bottom-auto md:left-auto md:right-8 md:top-1/2 md:-translate-y-1/2 md:flex-col"
       >
         <Button
           size="icon"
-          variant="outline"
+          variant="ghost"
+          className="rounded-full"
           onClick={() => go(-1)}
           disabled={index <= 0}
           aria-label="Previous short"
@@ -159,7 +164,8 @@ export default function Reader({
         </Button>
         <Button
           size="icon"
-          variant="outline"
+          variant="ghost"
+          className="rounded-full"
           onClick={() => go(1)}
           disabled={index >= visible.length - 1}
           aria-label="Next short"
