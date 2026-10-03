@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { getCardLists } from "@/lib/review-data";
+import { getCardLists, getStoryLists } from "@/lib/review-data";
 import LogoutButton from "./logout-button";
 
 export default async function Home() {
@@ -20,6 +20,8 @@ export default async function Home() {
   `;
   const cardLists = await getCardLists();
   const latest = cardLists[0];
+  const storyLists = await getStoryLists();
+  const latestStories = storyLists[0];
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
@@ -56,6 +58,32 @@ export default async function Home() {
           </Link>
         ) : (
           <p className="text-sm text-muted-foreground">No shorts yet.</p>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="text-lg font-semibold">Stories</h2>
+          {storyLists.length > 0 && (
+            <Link href="/read/stories" className="text-sm underline">
+              All lists
+            </Link>
+          )}
+        </div>
+        {latestStories ? (
+          <Link
+            href={`/read/stories/${latestStories.slug}`}
+            className="block rounded-lg border bg-background p-4 shadow-sm transition hover:bg-muted"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-medium">{latestStories.title}</p>
+              <span className="shrink-0 text-sm text-muted-foreground">
+                {latestStories.total} stories
+              </span>
+            </div>
+          </Link>
+        ) : (
+          <p className="text-sm text-muted-foreground">No stories yet.</p>
         )}
       </section>
 

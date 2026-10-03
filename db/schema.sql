@@ -17,7 +17,7 @@ CREATE TABLE lists (
   description text,
   guide_md text,
   status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
-  kind text NOT NULL DEFAULT 'pair' CONSTRAINT lists_kind_check CHECK (kind IN ('pair', 'card')),
+  kind text NOT NULL DEFAULT 'pair' CONSTRAINT lists_kind_check CHECK (kind IN ('pair', 'card', 'story')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -83,3 +83,24 @@ CREATE TABLE card_reviews (
   )
 );
 CREATE INDEX card_reviews_reviewer ON card_reviews (reviewer_id);
+
+CREATE TABLE story_reviews (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id uuid NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  reviewer_id uuid NOT NULL REFERENCES reviewers(id),
+  verdict text NOT NULL
+    CONSTRAINT story_reviews_verdict_check
+    CHECK (verdict IN ('good', 'wrong_link', 'series_not_story', 'missing_link')),
+  bad_entries int[] NOT NULL DEFAULT '{}'
+    CONSTRAINT story_reviews_bad_entries_check CHECK (0 <= ALL (bad_entries)),
+  note text,
+  time_spent_ms int,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (item_id, reviewer_id),
+  CONSTRAINT story_reviews_entries_check
+    CHECK ((verdict = 'wrong_link') = (cardinality(bad_entries) >= 1)),
+  CONSTRAINT story_reviews_note_check
+    CHECK (verdict <> 'missing_link' OR note IS NOT NULL)
+);
+CREATE INDEX story_reviews_reviewer ON story_reviews (reviewer_id);

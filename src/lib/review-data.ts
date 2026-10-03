@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db";
-import type { Progress, ReadItem, ReadList, ReviewItem } from "@/lib/types";
+import type { Progress, ReadItem, ReadList, ReviewItem, StoryItem } from "@/lib/types";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,6 +69,35 @@ export async function getCardItems(listId: string, reviewerId: string): Promise<
           suggested_summary: r.suggested_summary,
           note: r.note,
         }
+      : null,
+  }));
+}
+
+export async function getStoryLists(): Promise<ReadList[]> {
+  const rows = await sql`
+    SELECT l.slug, l.title, l.status, count(i.id)::int AS total
+    FROM lists l
+    LEFT JOIN items i ON i.list_id = l.id
+    WHERE l.kind = 'story'
+    GROUP BY l.id
+    ORDER BY l.slug DESC
+  `;
+  return rows as ReadList[];
+}
+
+export async function getStoryItems(listId: string, reviewerId: string): Promise<StoryItem[]> {
+  const rows = await sql`
+    SELECT i.id, i.payload, s.id AS feedback_id, s.verdict, s.bad_entries, s.note
+    FROM items i
+    LEFT JOIN story_reviews s ON s.item_id = i.id AND s.reviewer_id = ${reviewerId}
+    WHERE i.list_id = ${listId}
+    ORDER BY (i.payload->>'last_active')::timestamptz DESC NULLS LAST, i.position
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    payload: r.payload,
+    feedback: r.feedback_id
+      ? { verdict: r.verdict, bad_entries: r.bad_entries, note: r.note }
       : null,
   }));
 }
