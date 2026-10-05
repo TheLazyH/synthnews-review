@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import CardView from "@/components/card-view";
+import { PageLoader } from "@/components/global-loader";
 import ShortsNav, { useShortsKeys } from "@/components/shorts-nav";
 import type { FeedCard, FeedPage } from "@/lib/public-data";
 
@@ -377,11 +378,12 @@ function Reader({
         </div>
       )}
 
-      {waiting && (
-        <p className="text-sm text-muted-foreground">
-          {switching || next ? "Loading…" : "No news here yet."}
-        </p>
-      )}
+      {waiting &&
+        (switching || next ? (
+          <PageLoader />
+        ) : (
+          <p className="text-sm text-muted-foreground">No news here yet.</p>
+        ))}
 
       {failed && (
         <div className="flex items-center gap-3 text-sm">

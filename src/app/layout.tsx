@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import GlobalLoader from "@/components/global-loader";
 import ReadingControls from "@/components/reading-controls";
 import SiteHeader from "@/components/site-header";
 import "./globals.css";
@@ -38,6 +39,7 @@ export default function RootLayout({
         <SiteHeader />
         {children}
         <ReadingControls />
+        <GlobalLoader />
       </body>
     </html>
   );
