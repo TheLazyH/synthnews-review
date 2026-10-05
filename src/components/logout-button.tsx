@@ -10,5 +10,9 @@ export default function LogoutButton() {
     router.replace("/login");
     router.refresh();
   }
-  return <Button variant="outline" onClick={logout}>Sign out</Button>;
+  return (
+    <Button size="sm" variant="outline" onClick={logout}>
+      Logout
+    </Button>
+  );
 }

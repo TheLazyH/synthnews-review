@@ -10,8 +10,8 @@ export default async function StoriesIndex() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
-      <Link href="/" className="text-sm underline">
-        ← Home
+      <Link href="/review" className="text-sm underline">
+        ← Review
       </Link>
       <h1 className="text-xl font-semibold">Stories</h1>
 
@@ -25,7 +25,7 @@ export default async function StoriesIndex() {
         {lists.map((l) => (
           <Link
             key={l.slug}
-            href={`/read/stories/${l.slug}`}
+            href={`/review/stories/${l.slug}`}
             className="block rounded-lg border bg-background p-4 shadow-sm transition hover:bg-muted"
           >
             <div className="flex items-center justify-between gap-4">

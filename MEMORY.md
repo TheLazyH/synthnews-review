@@ -17,6 +17,9 @@ space from `synthnews-pipeline` and `ingest` — this covers
 - Data flow:
   `synthnews-pipeline` sampler → CSV → `review_push.py` → Neon (review DB)
   → reviewers via Vercel app → `review_pull.py` (not built yet) → `data/labels/`.
+- Since 2026-10-05 the app has two halves (dev-stage preview):
+  - Public news reader (no login, read-only): `/` shorts feed, `/stories`.
+  - Review area (login): `/review/...` — card verdicts, story review, pair review.
 
 ## 2. LOCKED DECISIONS
 - Hosting: Vercel (free), function region `sin1` (Singapore), same region as the DB.
@@ -44,7 +47,17 @@ space from `synthnews-pipeline` and `ingest` — this covers
   is deferred (phase 5).
 - Search engines blocked: `robots: { index: false, follow: false }` in layout
   metadata + `public/robots.txt` disallow all.
-- Code style: no comments or docstrings in delivered code. No hard-coded word
+- Public routes (allowlist in `src/proxy.ts`): `/`, `/stories`, `/stories/:id`,
+  `/api/feed`, GET/HEAD only. Every other path and method needs a session
+  (logged-out pages → `/login`, `/api/*` → 401). Server Functions arrive as
+  POSTs to page paths, so public pages must stay GET-only.
+- Public reader shows ONLY cards with `hidden_meta.card_status = 'active'` and
+  selects `payload` only; `hidden_meta` contents never reach the browser.
+- Public stories: latest story-list version per `story_id`; counts and shows
+  only active linked cards; hidden unless ≥ 2 active cards.
+- Light mode only (no dark toggle). Text-size control kept.
+- Code style: no comments or docstrings in delivered code (eslint-disable
+  lines excepted). No hard-coded word
   lists anywhere (standing SynthNews rule).
 
 ## 3. LABEL DEFINITIONS (the reviewing rule)
@@ -76,7 +89,8 @@ active · failed_logins · locked_until · created_at
 ### `lists`
 id uuid PK · slug UNIQUE · title · description · guide_md (plain text, rendered
 with `whitespace-pre-wrap`; NULL → built-in `PairGuide`) · status `open|closed` ·
-created_at
+kind `pair|card|story` (default `pair`) · created_at
+- Card list slugs: `cards-YYYY-MM-DD`.
 
 ### `items`
 id uuid PK · list_id FK (cascade) · external_id (pipeline `pair_id`) · position ·
@@ -85,6 +99,27 @@ index (list_id, position)
 - `payload` = `{a: Article, b: Article, hours_apart}`;
   `Article` = `{title, lead (≤800 chars), url, source, published (ISO), category}`.
 - `hidden_meta` = `{bucket, sim, shared_weight, shared_entities}`.
+- Above is for `kind = 'pair'`. Other kinds:
+  - card `payload` = `{kind:"card", headline, summary, sentences[], category,
+    published, image: {url, credit} | null, sources[]}`; source =
+    `{title, url, source (domain), published, image_url | null}`, ordered
+    earliest first. `image`/`image_url` are optional in the TS types.
+  - card `hidden_meta` = `{card_status: active|needs_review, cluster_id,
+    created_at, model_id, prompt_version}`.
+  - story `payload` = `{kind:"story", headline, category, first_seen,
+    last_active, cluster_count, source_count, timeline[]}`; timeline entry =
+    `{published, headline, summary, sentences[], sources[]}` (no images).
+  - story `hidden_meta` = `{story_id, card_ids[], card_statuses[], cluster_ids[],
+    prompt_versions[]}`. Story `external_id` = `story_id`.
+  - Link story → cards: `hidden_meta.card_ids[i]` = card `items.external_id`
+    (NOT `items.id`); `cluster_ids` = card `hidden_meta.cluster_id`.
+    Cards carry no story id.
+
+### `card_reviews` / `story_reviews`
+Per-reviewer verdicts on card / story items, `UNIQUE(item_id, reviewer_id)`.
+card: verdict `good|needs_fix|wrong`, issues[], bad_sentences[],
+suggested_title/summary, note. story: verdict
+`good|wrong_link|series_not_story|missing_link`, bad_entries[], note.
 
 ### `reviews`
 id uuid PK · item_id FK (cascade) · reviewer_id FK · relation · is_opinion ·
@@ -95,6 +130,8 @@ CHECK skipped ⇔ relation IS NULL
 ### Current data
 - List `cluster-pairs-2026-09-29` — "Clustering pairs — 29 Sep", 82 items, from
   `synthnews-pipeline/data/labels/pairs_20260929.csv`.
+- As of 2026-10-05: 5 pair lists, 8 card lists (236 cards, 167 active),
+  3 story lists (24 stories, 10 with ≥ 2 active cards).
 - Reviewers: `harshitsahni20@gmail.com` (Harshit, admin). Second reviewer to be
   registered.
 
@@ -143,35 +180,58 @@ CHECK skipped ⇔ relation IS NULL
 ```
 db/schema.sql                         schema source of truth
 public/robots.txt                     disallow all
+next.config.ts                        redirects: /read/:path* → /review/:path*, /lists/:slug → /review/pairs/:slug
+src/proxy.ts                          route guard + public allowlist (Next 16: proxy.ts / export proxy)
 src/lib/db.ts                         neon() sql client
 src/lib/token.ts                      JWT sign/verify, SESSION_COOKIE (edge-safe, no next/headers)
 src/lib/session.ts                    create/get/clear session via cookies()
-src/lib/types.ts                      Article, ItemPayload, Relation, MyReview, ReviewItem, Progress
-src/lib/review-data.ts                getList, getProgress, nextItem(new|skipped), getItem, isUuid
-src/proxy.ts | src/middleware.ts      route guard (file name depends on Next.js version:
-                                      >=16 proxy.ts/export proxy, <=15 middleware.ts)
-src/app/layout.tsx                    metadata (noindex), PREFS_SCRIPT, ReadingControls
-src/app/page.tsx                      home: lists with my progress
-src/app/login/page.tsx                login form
-src/app/logout-button.tsx             sign out
-src/app/lists/[slug]/page.tsx         list: progress, Start/Continue, Review skipped, Download CSV, guide
-src/app/review/[slug]/page.tsx        wrapper (mode=new|skipped)
-src/app/review/[slug]/review-screen.tsx  review UI: cards, guided Q1/Q2, opinion, confidence, note, skip, back
-src/components/pair-guide.tsx         default labelling guide
-src/components/reading-controls.tsx   dark mode + text size (100/112/125%)
-src/app/api/auth/login/route.ts       POST login (+ lockout)
-src/app/api/auth/logout/route.ts      POST logout
-src/app/api/lists/[slug]/next/route.ts    GET next item + progress (?mode=skipped)
-src/app/api/lists/[slug]/export/route.ts  GET my reviews as CSV
-src/app/api/items/[id]/route.ts           GET item + my review (for Back)
-src/app/api/items/[id]/review/route.ts    POST upsert review (validates; 409 if list closed)
+src/lib/types.ts                      pair, card, story payload + feedback types
+src/lib/review-data.ts                review queries (lists, items + my feedback), isUuid
+src/lib/public-data.ts                public queries: getFeed (keyset), getFeedAround, getFeedCategories,
+                                      getStories, getStoryCards, parseFeedQuery
+src/app/layout.tsx                    metadata (noindex), PREFS_SCRIPT (text size), SiteHeader, ReadingControls
+src/components/site-header.tsx        SynthNews · Feed · Stories · Login | Review + Logout
+src/components/card-view.tsx          shared card: category band + image carousel, headline, sentences, source chips
+src/components/shorts-nav.tsx         ShortsNav (fixed ↑/↓) + useShortsKeys (arrows; j/k opt-in)
+src/components/logout-button.tsx      Logout
+src/components/reading-controls.tsx   text size (100/112/125%)
+
+PUBLIC
+src/app/page.tsx                      / — server: categories + getFeedAround(?category, ?card)
+src/app/feed-reader.tsx               one-card shorts reader: chips, prefetch, caught-up, wheel/swipe/keys,
+                                      sessionStorage restore
+src/app/stories/page.tsx              /stories — stories with ≥ 2 active cards
+src/app/stories/[id]/page.tsx         /stories/:story_id — active cards, newest first
+src/app/api/feed/route.ts             GET only; ?category ?cursor ?limit (≤ 50); bad input → 400
+
+REVIEW (login)
+src/app/review/page.tsx               dashboard: card dates, story lists, pair lists
+src/app/review/[slug]/                card reader with verdicts (reader.tsx, short-view.tsx)
+src/app/review/stories/               story lists + timeline review
+src/app/review/pairs/[slug]/page.tsx  pair list: progress, Start/Continue, skipped, CSV, guide
+src/app/review/pairs/[slug]/run/      pair review screen (mode=new|skipped)
+src/app/login/page.tsx                login form → /review
+
+API (login unless noted)
+src/app/api/auth/login|logout         POST (login is public)
+src/app/api/lists/[slug]/next|export  pair next item / CSV
+src/app/api/items/[id](/review)       pair item GET / POST review
+src/app/api/read/items/[id]/feedback       POST card verdict
+src/app/api/read/items/[id]/story-feedback POST story verdict
 ```
-- Route guard matcher excludes `api/auth/login`, `_next/static`, `_next/image`,
-  `favicon.ico`, `robots.txt`. Unauthenticated `/api/*` → 401 JSON; pages →
-  redirect `/login`.
+- SUPERSEDED 2026-10-05: `/` was the logged-in dashboard, `/read/...` the card
+  and story review, `/lists/:slug` + `/review/:slug` the pair flow. Old pair
+  `/review/:slug` links are intentionally broken.
 - Next.js 15+: route `params` / `searchParams` are Promises — always `await`.
-- Browser prefs in localStorage: `theme` (`light|dark`), `textScale` (`100|112|125`),
-  applied pre-paint by `PREFS_SCRIPT` (hence `suppressHydrationWarning` on `<html>`).
+- Browser prefs in localStorage: `textScale` (`100|112|125`), applied pre-paint by
+  `PREFS_SCRIPT` (hence `suppressHydrationWarning` on `<html>`). `theme` is
+  no longer read (SUPERSEDED: dark mode removed 2026-10-05).
+- Feed reader state in sessionStorage `feed-state:v1` (category, loaded cards,
+  next cursor, index, savedAt; 30-min expiry). URL mirrors `?category=&card=`.
+- Feed cursor = `<published ISO, microseconds, UTC>_<items.id>`; order
+  `published DESC, id DESC`.
+- Images: plain `<img>` with `referrerPolicy="no-referrer"` (publisher hotlinks),
+  not `next/image`.
 - Card accents: A = `border-l-sky-500`, B = `border-l-amber-500`.
 
 ## 7. PIPELINE-SIDE PIECES (`synthnews-pipeline/`)
@@ -208,7 +268,12 @@ PYTHONPATH=. uv run python scripts/review_push.py data/labels/pairs_YYYYMMDD.csv
 - Clear any test answers before real labelling (DELETE from `reviews` for the
   reviewer).
 - No admin UI (users, lists, closing) — all via scripts/SQL.
-- No keyboard shortcuts in the review screen.
+- No keyboard shortcuts in the pair review screen (card reader has ↑/↓).
+- Public feed does not collapse cards of the same story, and does not
+  de-duplicate a card that appears in two card lists (none today).
+- Deep link `?card=` is only found within the first 200 cards of a category.
+- `npm run lint` has 13 known problems in older files (react-hooks purity /
+  set-state-in-effect, unescaped quotes, one `any`); new code lints clean.
 - `guide_md` is shown as plain text, not rendered Markdown.
 - Sampler CSV has no URL columns (push fetches them); add `a_url`/`b_url` to the
   sampler if CSVs are ever reviewed outside the app.
@@ -236,5 +301,15 @@ PYTHONPATH=. uv run python scripts/review_push.py data/labels/pairs_YYYYMMDD.csv
 - VS Code/Pylance hover text or "Expected N arguments" on freshly edited files is
   often stale analysis — trust `npm run build` / `pytest`, restart the language
   server if needed.
+- Renamed/moved routes leave stale generated types in `.next/types` and
+  `.next/dev/types` → `tsc` "Cannot find module …/page.js". Run
+  `npx next typegen` and delete `.next/dev/types` (recreated by `next dev`).
+- `git mv src/x src/y` when `src/y` already exists (even empty) nests it as
+  `src/y/x`. Check the tree after moves.
+- eslint `react-hooks/set-state-in-effect` follows calls into helpers: start
+  fetches inside the effect and set state in `.then`, not via a helper that
+  sets state before awaiting.
+- JS `Date` rolls invalid dates over (Feb 30 → Mar 2) where Postgres errors →
+  validate user dates by round-trip (`toISOString()` equals input).
 - Neon offers optional CLI onboarding (`neon login`, `neon mcp`, `neon deploy`) —
   NOT used; only the pooled connection string is needed.

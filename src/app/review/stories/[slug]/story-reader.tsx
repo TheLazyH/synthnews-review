@@ -76,7 +76,7 @@ export default function StoryReader({
     <main className="mx-auto max-w-2xl space-y-5 p-4 pb-32 md:p-6 md:pb-24 md:pr-24">
       <header className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-sm">
-          <Link href="/read/stories" className="underline">
+          <Link href="/review/stories" className="underline">
             ← All lists
           </Link>
           {items.length > 0 && (

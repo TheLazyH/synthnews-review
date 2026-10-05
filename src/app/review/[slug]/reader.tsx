@@ -2,21 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import ShortsNav, { useShortsKeys } from "@/components/shorts-nav";
 import type { MyFeedback, ReadItem } from "@/lib/types";
 import ShortView from "./short-view";
 
 export type ReaderItem = ReadItem & { updated: string };
-
-function isTyping(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement)
-  );
-}
 
 export default function Reader({
   title,
@@ -66,20 +56,7 @@ export default function Reader({
     [visible.length],
   );
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (isTyping(e.target)) return;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        go(1);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        go(-1);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [go]);
+  useShortsKeys(go);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -110,7 +87,7 @@ export default function Reader({
     <main className="mx-auto max-w-2xl space-y-5 p-4 pb-32 md:p-6 md:pb-24 md:pr-24">
       <header className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-sm">
-          <Link href="/read" className="underline">
+          <Link href="/review" className="underline">
             ← All dates
           </Link>
           {visible.length > 0 && (
@@ -148,31 +125,12 @@ export default function Reader({
         />
       )}
 
-      <nav
-        aria-label="Move between shorts"
-        className="fixed bottom-4 left-4 z-40 flex flex-row gap-1 rounded-full border bg-background/90 p-1 shadow-sm backdrop-blur md:bottom-auto md:left-auto md:right-8 md:top-1/2 md:-translate-y-1/2 md:flex-col"
-      >
-        <Button
-          size="icon"
-          variant="ghost"
-          className="rounded-full"
-          onClick={() => go(-1)}
-          disabled={index <= 0}
-          aria-label="Previous short"
-        >
-          ↑
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="rounded-full"
-          onClick={() => go(1)}
-          disabled={index >= visible.length - 1}
-          aria-label="Next short"
-        >
-          ↓
-        </Button>
-      </nav>
+      <ShortsNav
+        onPrev={() => go(-1)}
+        onNext={() => go(1)}
+        canPrev={index > 0}
+        canNext={index < visible.length - 1}
+      />
     </main>
   );
 }

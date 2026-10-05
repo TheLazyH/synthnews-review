@@ -31,7 +31,7 @@ export default function LoginPage() {
     });
     setBusy(false);
     if (res.ok) {
-      router.replace("/");
+      router.replace("/review");
       router.refresh();
       return;
     }
@@ -40,7 +40,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-[70vh] items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>SynthNews Review</CardTitle>

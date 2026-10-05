@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import ReadingControls from "@/components/reading-controls";
+import SiteHeader from "@/components/site-header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,11 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SynthNews Review",
+  title: "SynthNews",
   robots: { index: false, follow: false },
 };
 
-const PREFS_SCRIPT = `try{var t=localStorage.getItem("theme");var d=t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);var s=localStorage.getItem("textScale");if(s)document.documentElement.style.fontSize=s+"%";}catch(e){}`;
+const PREFS_SCRIPT = `try{var s=localStorage.getItem("textScale");if(s)document.documentElement.style.fontSize=s+"%";}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -34,6 +35,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-muted/50 text-foreground antialiased`}
       >
+        <SiteHeader />
         {children}
         <ReadingControls />
       </body>

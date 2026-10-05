@@ -204,7 +204,7 @@ export default function ReviewScreen({
     <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
       <header className="space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <Link href={`/lists/${slug}`} className="underline">
+          <Link href={`/review/pairs/${slug}`} className="underline">
             ← List
           </Link>
           {progress && (
@@ -238,7 +238,7 @@ export default function ReviewScreen({
               </Button>
             )}
             <Button asChild>
-              <Link href={`/lists/${slug}`}>Finish and download CSV</Link>
+              <Link href={`/review/pairs/${slug}`}>Finish and download CSV</Link>
             </Button>
           </div>
         </div>

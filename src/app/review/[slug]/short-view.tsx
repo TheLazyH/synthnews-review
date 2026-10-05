@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import CardView, { wordCount } from "@/components/card-view";
 import type {
   CardIssue,
-  CardSource,
   CardVerdict,
   MyFeedback,
 } from "@/lib/types";
@@ -34,38 +34,6 @@ const ERRORS: Record<string, string> = {
     "The suggested summary is too long. Keep it under 2000 characters.",
 };
 
-function domainChips(sources: CardSource[]) {
-  const first = new Map<string, CardSource>();
-  for (const s of sources) if (!first.has(s.source)) first.set(s.source, s);
-  return [...first.values()];
-}
-
-function wordCount(text: string) {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function hueOf(text: string) {
-  let h = 0;
-  for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return h;
-}
-
-function coverStyles(category: string | null): {
-  tint?: CSSProperties;
-  ink?: CSSProperties;
-} {
-  if (!category) return {};
-  const h = hueOf(category);
-  return {
-    tint: {
-      backgroundColor: `color-mix(in oklab, hsl(${h} 70% 50%) 14%, transparent)`,
-    },
-    ink: {
-      color: `color-mix(in oklab, hsl(${h} 70% 45%) 70%, currentColor)`,
-    },
-  };
-}
-
 export default function ShortView({
   item,
   saved,
@@ -75,7 +43,7 @@ export default function ShortView({
   saved: MyFeedback | null;
   onSaved: (feedback: MyFeedback) => void;
 }) {
-  const { headline, sentences, category, sources } = item.payload;
+  const { headline, sentences } = item.payload;
   const original = sentences.join(" ");
   const [verdict, setVerdict] = useState<CardVerdict | null>(
     saved?.verdict ?? null,
@@ -97,8 +65,6 @@ export default function ShortView({
   }, []);
 
   const marking = issues.includes("not_in_sources");
-  const chips = domainChips(sources);
-  const cover = coverStyles(category);
   const savedLabel = saved
     ? VERDICTS.find((v) => v.value === saved.verdict)?.label
     : null;
@@ -179,78 +145,13 @@ export default function ShortView({
 
   return (
     <>
-      <article className="overflow-hidden rounded-2xl border bg-background shadow-sm">
-        <div
-          className={`flex aspect-[16/7] flex-col justify-end gap-1 p-5 sm:p-6 ${
-            cover.tint ? "" : "bg-muted"
-          }`}
-          style={cover.tint}
-        >
-          <span
-            className="text-3xl font-semibold capitalize tracking-tight sm:text-4xl"
-            style={cover.ink}
-          >
-            {category ?? "News"}
-          </span>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>Updated {item.updated} IST</span>
-            <span>
-              {chips.length} {chips.length === 1 ? "source" : "sources"}
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-4 p-5 sm:p-6">
-          <h2 className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
-            {headline}
-          </h2>
-          <p className="max-w-prose text-[1.0625rem] leading-7 text-foreground/85">
-            {sentences.map((sentence, n) => (
-              <span key={n}>
-                {n > 0 && " "}
-                {marking ? (
-                  <button
-                    type="button"
-                    aria-pressed={badSentences.includes(n)}
-                    onClick={() => toggleSentence(n)}
-                    className={`inline rounded text-left underline-offset-4 ${
-                      badSentences.includes(n)
-                        ? "bg-red-500/10 underline decoration-red-500 decoration-2"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {sentence}
-                  </button>
-                ) : (
-                  sentence
-                )}
-              </span>
-            ))}
-          </p>
-          {marking && (
-            <p className="text-xs text-muted-foreground">
-              Tap each sentence the sources don&apos;t support.
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-            {chips.map((s) => (
-              <a
-                key={s.source}
-                href={s.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={s.title}
-                className="rounded-full border px-3 py-1 text-xs font-medium transition hover:bg-muted"
-              >
-                {s.source} ↗
-              </a>
-            ))}
-            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-              {wordCount(original)} words
-            </span>
-          </div>
-        </div>
-      </article>
+      <CardView
+        payload={item.payload}
+        updated={item.updated}
+        marking={marking}
+        badSentences={badSentences}
+        onToggleSentence={toggleSentence}
+      />
 
       <section className="space-y-4 rounded-xl border bg-background/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">

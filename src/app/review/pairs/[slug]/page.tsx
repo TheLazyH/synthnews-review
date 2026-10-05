@@ -21,7 +21,7 @@ export default async function ListPage({
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
-      <Link href="/" className="text-sm underline">
+      <Link href="/review" className="text-sm underline">
         ← All lists
       </Link>
       <header className="space-y-1">
@@ -38,14 +38,14 @@ export default async function ListPage({
       <div className="flex flex-wrap gap-2">
         {remaining > 0 && list.status === "open" && (
           <Button asChild>
-            <Link href={`/review/${slug}`}>
+            <Link href={`/review/pairs/${slug}/run`}>
               {done === 0 ? "Start reviewing" : "Continue"}
             </Link>
           </Button>
         )}
         {progress.skipped > 0 && list.status === "open" && (
           <Button asChild variant="outline">
-            <Link href={`/review/${slug}?mode=skipped`}>
+            <Link href={`/review/pairs/${slug}/run?mode=skipped`}>
               Review skipped ({progress.skipped})
             </Link>
           </Button>

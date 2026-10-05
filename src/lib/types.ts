@@ -36,7 +36,10 @@ export type CardSource = {
   url: string;
   source: string;
   published: string;
+  image_url?: string | null;
 };
+
+export type CardImage = { url: string; credit: string };
 
 export type CardPayload = {
   kind: "card";
@@ -46,6 +49,7 @@ export type CardPayload = {
   category: string | null;
   published: string;
   sources: CardSource[];
+  image?: CardImage | null;
 };
 
 export type ReadList = {

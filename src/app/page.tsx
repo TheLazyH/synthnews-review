@@ -1,122 +1,31 @@
-import Link from "next/link";
-import { sql } from "@/lib/db";
-import { getSession } from "@/lib/session";
-import { getCardLists, getStoryLists } from "@/lib/review-data";
-import LogoutButton from "./logout-button";
+import { isUuid } from "@/lib/review-data";
+import { getFeedAround, getFeedCategories } from "@/lib/public-data";
+import FeedReader from "./feed-reader";
 
-export default async function Home() {
-  const session = await getSession();
-  const lists = await sql`
-    SELECT l.slug, l.title, l.description, l.status,
-           count(i.id)::int AS total,
-           (count(r.id) FILTER (WHERE NOT r.skipped))::int AS answered,
-           (count(r.id) FILTER (WHERE r.skipped))::int AS skipped
-    FROM lists l
-    LEFT JOIN items i ON i.list_id = l.id
-    LEFT JOIN reviews r ON r.item_id = i.id AND r.reviewer_id = ${session!.sub}
-    WHERE l.kind = 'pair'
-    GROUP BY l.id
-    ORDER BY l.created_at DESC
-  `;
-  const cardLists = await getCardLists();
-  const latest = cardLists[0];
-  const storyLists = await getStoryLists();
-  const latestStories = storyLists[0];
-
+export default async function FeedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ card?: string | string[]; category?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const categories = await getFeedCategories();
+  const rawCategory = typeof params.category === "string" ? params.category : "";
+  const category = categories.includes(rawCategory) ? rawCategory : "";
+  const card =
+    typeof params.card === "string" && isUuid(params.card) ? params.card : "";
+  const { page, index } = await getFeedAround({
+    category: category || null,
+    cardId: card || null,
+  });
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">SynthNews Review</h1>
-          <p className="text-sm text-muted-foreground">
-            Signed in as {session?.name} ({session?.email})
-          </p>
-        </div>
-        <LogoutButton />
-      </header>
-
-      <section className="space-y-3">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="text-lg font-semibold">Read News</h2>
-          {cardLists.length > 0 && (
-            <Link href="/read" className="text-sm underline">
-              All dates
-            </Link>
-          )}
-        </div>
-        {latest ? (
-          <Link
-            href={`/read/${latest.slug}`}
-            className="block rounded-lg border bg-background p-4 shadow-sm transition hover:bg-muted"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <p className="font-medium">{latest.title}</p>
-              <span className="shrink-0 text-sm text-muted-foreground">
-                {latest.total} shorts
-              </span>
-            </div>
-          </Link>
-        ) : (
-          <p className="text-sm text-muted-foreground">No shorts yet.</p>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="text-lg font-semibold">Stories</h2>
-          {storyLists.length > 0 && (
-            <Link href="/read/stories" className="text-sm underline">
-              All lists
-            </Link>
-          )}
-        </div>
-        {latestStories ? (
-          <Link
-            href={`/read/stories/${latestStories.slug}`}
-            className="block rounded-lg border bg-background p-4 shadow-sm transition hover:bg-muted"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <p className="font-medium">{latestStories.title}</p>
-              <span className="shrink-0 text-sm text-muted-foreground">
-                {latestStories.total} stories
-              </span>
-            </div>
-          </Link>
-        ) : (
-          <p className="text-sm text-muted-foreground">No stories yet.</p>
-        )}
-      </section>
-
-      <h2 className="text-lg font-semibold">Cluster review</h2>
-
-      {lists.length === 0 && (
-        <p className="text-sm text-muted-foreground">No review lists yet.</p>
-      )}
-      <div className="space-y-3">
-        {lists.map((l) => {
-          const done = l.answered + l.skipped;
-          return (
-            <Link
-              key={l.slug}
-              href={`/lists/${l.slug}`}
-              className="block rounded-lg border bg-background p-4 shadow-sm transition hover:bg-muted"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium">{l.title}</p>
-                  {l.description && (
-                    <p className="text-sm text-muted-foreground">{l.description}</p>
-                  )}
-                </div>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {done} / {l.total}
-                  {l.status === "closed" ? " · closed" : ""}
-                </span>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-    </main>
+    <FeedReader
+      initial={page}
+      categories={categories}
+      category={category}
+      categoryParam={!!category}
+      requestedCard={card}
+      found={index >= 0}
+      index={Math.max(index, 0)}
+    />
   );
 }
