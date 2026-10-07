@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import GlobalLoader from "@/components/global-loader";
 import ReadingControls from "@/components/reading-controls";
 import SiteHeader from "@/components/site-header";
@@ -40,6 +41,7 @@ export default function RootLayout({
         {children}
         <ReadingControls />
         <GlobalLoader />
+        <Analytics />
       </body>
     </html>
   );

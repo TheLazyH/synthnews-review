@@ -28,6 +28,6 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/auth/login|_next/static|_next/image|favicon.ico|robots.txt).*)",
+    "/((?!api/auth/login|_next/static|_next/image|_vercel|favicon.ico|robots.txt).*)",
   ],
 };
