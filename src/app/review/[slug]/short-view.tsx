@@ -9,6 +9,7 @@ import type {
   CardIssue,
   CardVerdict,
   MyFeedback,
+  ReportReason,
 } from "@/lib/types";
 import type { ReaderItem } from "./reader";
 
@@ -24,6 +25,21 @@ const ISSUES: { value: CardIssue; label: string }[] = [
   { value: "copied", label: "Copied" },
   { value: "bad_headline", label: "Bad headline" },
 ];
+
+const REPORT_REASONS: Record<ReportReason, string> = {
+  wrong_fact: "Wrong fact",
+  missing_context: "Missing context",
+  outdated: "Outdated",
+  other: "Other",
+};
+
+const REPORTED_AT = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 const ERRORS: Record<string, string> = {
   issue_required: "Pick at least one issue.",
@@ -145,10 +161,15 @@ export default function ShortView({
 
   return (
     <>
-      {(item.status === "needs_review" || item.listTitle) && (
+      {(item.status === "needs_review" || item.listTitle || item.reportCount > 0) && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           {item.status === "needs_review" && (
             <Badge variant="destructive">Needs review</Badge>
+          )}
+          {item.reportCount > 0 && (
+            <Badge variant="outline">
+              {item.reportCount} {item.reportCount === 1 ? "report" : "reports"}
+            </Badge>
           )}
           {item.listTitle && <span>{item.listTitle}</span>}
         </div>
@@ -160,6 +181,28 @@ export default function ShortView({
         badSentences={badSentences}
         onToggleSentence={toggleSentence}
       />
+
+      {item.reports.length > 0 && (
+        <section className="space-y-2 rounded-xl border bg-background/60 p-4 sm:p-5">
+          <p className="text-sm font-medium text-muted-foreground">
+            Reader reports ({item.reportCount})
+          </p>
+          <ul className="divide-y">
+            {item.reports.map((r, n) => (
+              <li key={`${r.created_at}-${n}`} className="space-y-0.5 py-2 text-sm">
+                <p>
+                  <span className="font-medium">{REPORT_REASONS[r.reason] ?? r.reason}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {REPORTED_AT.format(new Date(r.created_at))}
+                  </span>
+                </p>
+                {r.note && <p className="text-muted-foreground">{r.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-4 rounded-xl border bg-background/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">

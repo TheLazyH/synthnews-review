@@ -22,7 +22,7 @@ const WHEEL_GESTURE_GAP_MS = 200;
 const WHEEL_IDLE_RESET_MS = 800;
 const WHEEL_EDGE_DWELL_MS = 350;
 
-const STATE_KEY = "feed-state:v2";
+const STATE_KEY = "feed-state:v3";
 const STATE_MAX_AGE_MS = 30 * 60 * 1000;
 const SAVE_DELAY_MS = 300;
 
@@ -363,7 +363,13 @@ function Reader({
       </header>
 
       {card && (
-        <CardView key={card.id} payload={card.payload} updated={card.updated} />
+        <CardView
+          key={card.id}
+          payload={card.payload}
+          updated={card.updated}
+          checking={card.checking}
+          reportId={card.id}
+        />
       )}
 
       {caughtUp && (

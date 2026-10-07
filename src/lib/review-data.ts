@@ -64,6 +64,8 @@ function toReadItem(r: Row): ReadItem {
     payload: r.payload,
     status: r.card_status === "needs_review" ? "needs_review" : "active",
     ...(r.list_title ? { listTitle: r.list_title } : {}),
+    reportCount: r.report_count ?? 0,
+    reports: r.reports ?? [],
     feedback: r.feedback_id
       ? {
           verdict: r.verdict,
@@ -81,7 +83,14 @@ export async function getCardItems(listId: string, reviewerId: string): Promise<
   const rows = await sql`
     SELECT i.id, i.payload, i.hidden_meta->>'card_status' AS card_status,
            c.id AS feedback_id, c.verdict, c.issues, c.bad_sentences,
-           c.suggested_title, c.suggested_summary, c.note
+           c.suggested_title, c.suggested_summary, c.note,
+           (SELECT count(*)::int FROM card_reports cr WHERE cr.card_id = i.id) AS report_count,
+           (SELECT coalesce(json_agg(json_build_object(
+                     'reason', r.reason, 'note', r.note, 'created_at', r.created_at)
+                     ORDER BY r.created_at DESC), '[]'::json)
+            FROM (SELECT reason, note, created_at FROM card_reports cr
+                  WHERE cr.card_id = i.id
+                  ORDER BY created_at DESC LIMIT 20) r) AS reports
     FROM items i
     LEFT JOIN card_reviews c ON c.item_id = i.id AND c.reviewer_id = ${reviewerId}
     WHERE i.list_id = ${listId}
@@ -100,7 +109,14 @@ export async function getNeedsReviewItems(
       SELECT i.id, i.payload, i.hidden_meta->>'card_status' AS card_status,
              l.title AS list_title,
              c.id AS feedback_id, c.verdict, c.issues, c.bad_sentences,
-             c.suggested_title, c.suggested_summary, c.note
+             c.suggested_title, c.suggested_summary, c.note,
+           (SELECT count(*)::int FROM card_reports cr WHERE cr.card_id = i.id) AS report_count,
+           (SELECT coalesce(json_agg(json_build_object(
+                     'reason', r.reason, 'note', r.note, 'created_at', r.created_at)
+                     ORDER BY r.created_at DESC), '[]'::json)
+            FROM (SELECT reason, note, created_at FROM card_reports cr
+                  WHERE cr.card_id = i.id
+                  ORDER BY created_at DESC LIMIT 20) r) AS reports
       FROM items i
       JOIN lists l ON l.id = i.list_id AND l.kind = 'card'
       LEFT JOIN card_reviews c ON c.item_id = i.id AND c.reviewer_id = ${reviewerId}

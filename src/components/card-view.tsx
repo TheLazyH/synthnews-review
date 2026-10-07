@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import ReportSheet from "@/components/report-sheet";
 import type { CardImage, CardPayload, CardSource } from "@/lib/types";
 
 export function domainChips(sources: CardSource[]) {
@@ -206,10 +207,14 @@ export default function CardView({
   badSentences = [],
   onToggleSentence,
   noImages = false,
+  checking = false,
+  reportId,
 }: {
   payload: CardPayload;
   updated: string;
   noImages?: boolean;
+  checking?: boolean;
+  reportId?: string;
   marking?: boolean;
   badSentences?: number[];
   onToggleSentence?: (n: number) => void;
@@ -217,6 +222,7 @@ export default function CardView({
   const { headline, sentences, category, sources, image } = payload;
   const chips = domainChips(sources);
   const original = sentences.join(" ");
+  const [reporting, setReporting] = useState(false);
   return (
     <article className="overflow-hidden rounded-2xl border bg-background shadow-sm">
       <CoverBand
@@ -254,6 +260,11 @@ export default function CardView({
             </span>
           ))}
         </p>
+        {checking && (
+          <p className="text-xs text-muted-foreground">
+            Some details still being checked
+          </p>
+        )}
         {marking && (
           <p className="text-xs text-muted-foreground">
             Tap each sentence the sources don&apos;t support.
@@ -276,7 +287,19 @@ export default function CardView({
             {wordCount(original)} words
           </span>
         </div>
+        {reportId && (
+          <button
+            type="button"
+            onClick={() => setReporting(true)}
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            Report an issue
+          </button>
+        )}
       </div>
+      {reportId && reporting && (
+        <ReportSheet cardId={reportId} onClose={() => setReporting(false)} />
+      )}
     </article>
   );
 }

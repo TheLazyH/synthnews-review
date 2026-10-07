@@ -13,12 +13,14 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "needs_review", label: "Needs review" },
+  { value: "reported", label: "Reported" },
 ];
 
 function matches(item: ReaderItem, category: string, status: StatusFilter) {
   return (
     (!category || item.payload.category === category) &&
-    (status === "all" || item.status === status)
+    (status === "all" ||
+      (status === "reported" ? item.reportCount > 0 : item.status === status))
   );
 }
 
@@ -53,7 +55,13 @@ export default function Reader({
   );
   const statusCounts = useMemo(() => {
     const needs = items.filter((i) => i.status === "needs_review").length;
-    return { all: items.length, active: items.length - needs, needs_review: needs };
+    const reported = items.filter((i) => i.reportCount > 0).length;
+    return {
+      all: items.length,
+      active: items.length - needs,
+      needs_review: needs,
+      reported,
+    };
   }, [items]);
   const [status, setStatus] = useState<StatusFilter>(initialStatus);
   const visible = useMemo(

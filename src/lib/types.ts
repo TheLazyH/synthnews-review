@@ -63,7 +63,15 @@ export type CardList = ReadList & { needs_review: number };
 
 export type CardStatus = "active" | "needs_review";
 
-export type StatusFilter = "all" | CardStatus;
+export type StatusFilter = "all" | CardStatus | "reported";
+
+export type ReportReason = "wrong_fact" | "missing_context" | "outdated" | "other";
+
+export type CardReport = {
+  reason: ReportReason;
+  note: string | null;
+  created_at: string;
+};
 
 export type CardVerdict = "good" | "needs_fix" | "wrong";
 
@@ -87,6 +95,8 @@ export type ReadItem = {
   payload: CardPayload;
   status: CardStatus;
   listTitle?: string;
+  reportCount: number;
+  reports: CardReport[];
   feedback: MyFeedback | null;
 };
 

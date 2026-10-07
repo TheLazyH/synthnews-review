@@ -104,3 +104,15 @@ CREATE TABLE story_reviews (
     CHECK (verdict <> 'missing_link' OR note IS NOT NULL)
 );
 CREATE INDEX story_reviews_reviewer ON story_reviews (reviewer_id);
+
+CREATE TABLE card_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id uuid NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  reason text NOT NULL
+    CHECK (reason IN ('wrong_fact', 'missing_context', 'outdated', 'other')),
+  note text CHECK (note IS NULL OR char_length(note) <= 280),
+  visitor_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX card_reports_card_idx ON card_reports (card_id);
+CREATE INDEX card_reports_visitor_idx ON card_reports (visitor_hash, created_at);

@@ -2,7 +2,12 @@ import { sql } from "@/lib/db";
 import { isUuid } from "@/lib/review-data";
 import type { CardPayload } from "@/lib/types";
 
-export type FeedCard = { id: string; payload: CardPayload; updated: string };
+export type FeedCard = {
+  id: string;
+  payload: CardPayload;
+  updated: string;
+  checking: boolean;
+};
 
 export type FeedCursor = { published: string; id: string };
 
@@ -19,6 +24,7 @@ export type StorySegment = {
   sources: StorySource[];
   image: StoryImage | null;
   updated: string;
+  checking: boolean;
 };
 
 export type StoryImage = { url: string; credit: string };
@@ -121,10 +127,20 @@ function outletCount(payloads: CardPayload[]): number {
   return new Set(payloads.flatMap((p) => (p.sources ?? []).map((s) => s.source))).size;
 }
 
-type CardRow = { id: string; payload: CardPayload; published: string };
+type CardRow = {
+  id: string;
+  payload: CardPayload;
+  published: string;
+  checking: boolean;
+};
 
 function toCard(r: CardRow): FeedCard {
-  return { id: r.id, payload: publicPayload(r.payload), updated: formatWhen(r.published) };
+  return {
+    id: r.id,
+    payload: publicPayload(r.payload),
+    updated: formatWhen(r.published),
+    checking: r.checking === true,
+  };
 }
 
 export async function getFeed({
@@ -138,11 +154,12 @@ export async function getFeed({
 }): Promise<FeedPage> {
   const rows = await sql`
     SELECT i.id, i.payload,
+           (i.hidden_meta->>'card_status' = 'needs_review') AS checking,
            to_char((i.payload->>'published')::timestamptz AT TIME ZONE 'UTC',
                    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published
     FROM items i
     JOIN lists l ON l.id = i.list_id AND l.kind = 'card'
-    WHERE i.hidden_meta->>'card_status' = 'active'
+    WHERE i.hidden_meta->>'card_status' IN ('active', 'needs_review')
       AND (${category}::text IS NULL OR i.payload->>'category' = ${category}::text)
       AND (${cursor?.published ?? null}::timestamptz IS NULL
            OR ((i.payload->>'published')::timestamptz, i.id)
@@ -166,7 +183,7 @@ export async function getFeedCategories(): Promise<string[]> {
     SELECT i.payload->>'category' AS category
     FROM items i
     JOIN lists l ON l.id = i.list_id AND l.kind = 'card'
-    WHERE i.hidden_meta->>'card_status' = 'active'
+    WHERE i.hidden_meta->>'card_status' IN ('active', 'needs_review')
       AND i.payload->>'category' IS NOT NULL
     GROUP BY 1
     ORDER BY count(*) DESC, 1
@@ -185,15 +202,16 @@ export async function getStoryDeck(): Promise<StoryDeckItem[]> {
       ORDER BY i.hidden_meta->>'story_id', l.created_at DESC, l.slug DESC
     ),
     cards AS (
-      SELECT DISTINCT ON (s.story_id, c.external_id) s.story_id, c.id, c.payload
+      SELECT DISTINCT ON (s.story_id, c.external_id) s.story_id, c.id, c.payload,
+             (c.hidden_meta->>'card_status' = 'needs_review') AS checking
       FROM latest s
       CROSS JOIN LATERAL jsonb_array_elements_text(s.card_ids) AS cid
       JOIN items c ON c.external_id = cid
       JOIN lists cl ON cl.id = c.list_id AND cl.kind = 'card'
-      WHERE c.hidden_meta->>'card_status' = 'active'
+      WHERE c.hidden_meta->>'card_status' IN ('active', 'needs_review')
       ORDER BY s.story_id, c.external_id, cl.created_at DESC
     )
-    SELECT story_id, id, payload,
+    SELECT story_id, id, payload, checking,
            to_char((payload->>'published')::timestamptz AT TIME ZONE 'UTC',
                    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published
     FROM cards
@@ -235,6 +253,7 @@ export async function getStoryDeck(): Promise<StoryDeckItem[]> {
             .map((src) => ({ source: src.source, title: src.title, url: src.url })),
           image: firstImage(c.payload),
           updated: relativeTime(c.published, now),
+          checking: c.checking === true,
         })),
       },
     });

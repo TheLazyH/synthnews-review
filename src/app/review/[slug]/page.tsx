@@ -13,7 +13,9 @@ const UPDATED = new Intl.DateTimeFormat("en-IN", {
 });
 
 function parseStatus(raw: string | undefined): StatusFilter {
-  return raw === "active" || raw === "needs_review" ? raw : "all";
+  return raw === "active" || raw === "needs_review" || raw === "reported"
+    ? raw
+    : "all";
 }
 
 export default async function ReadPage({

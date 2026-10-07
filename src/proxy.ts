@@ -4,6 +4,7 @@ import { SESSION_COOKIE, readToken } from "@/lib/token";
 const PUBLIC_PATH = /^\/(?:stories(?:\/[^/]+)?|api\/feed)?$/;
 
 function isPublic(req: NextRequest, path: string) {
+  if (req.method === "POST" && path === "/api/report") return true;
   return (
     (req.method === "GET" || req.method === "HEAD") && PUBLIC_PATH.test(path)
   );

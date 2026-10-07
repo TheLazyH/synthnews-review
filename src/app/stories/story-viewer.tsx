@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { X } from "lucide-react";
+import ReportSheet from "@/components/report-sheet";
 import type { StoryDeckItem } from "@/lib/public-data";
 import CategoryIcon from "./category-icon";
 import { markSeen } from "./seen";
@@ -52,6 +53,7 @@ export default function StoryViewer({
   });
   const [held, setHeld] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [brokenImage, setBrokenImage] = useState<string | null>(null);
   const press = useRef<Press | null>(null);
@@ -68,7 +70,7 @@ export default function StoryViewer({
 
   const story = stories[pos.story];
   const segment = story.segments[pos.seg];
-  const paused = held || sheet || hidden;
+  const paused = held || sheet || reporting || hidden;
   const image =
     segment.image && segment.image.url !== brokenImage ? segment.image : null;
 
@@ -111,6 +113,7 @@ export default function StoryViewer({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (reporting) return;
       if (e.key === "Escape") {
         e.preventDefault();
         if (sheet) setSheet(false);
@@ -281,6 +284,11 @@ export default function StoryViewer({
           <p className="text-[1.0625rem] leading-7 text-foreground/85">
             {segment.summary}
           </p>
+          {segment.checking && (
+            <p className="text-xs text-muted-foreground">
+              Some details still being checked
+            </p>
+          )}
         </div>
 
         <p className="px-6 pt-3 text-sm text-muted-foreground">
@@ -295,8 +303,18 @@ export default function StoryViewer({
           </button>{" "}
           · {segment.updated}
         </p>
+        <button
+          type="button"
+          onClick={() => setReporting(true)}
+          className="self-start px-6 pt-1 text-xs text-muted-foreground underline underline-offset-2"
+        >
+          Report an issue
+        </button>
       </div>
 
+      {reporting && (
+        <ReportSheet cardId={segment.id} onClose={() => setReporting(false)} />
+      )}
       {sheet && (
         <SourcesSheet sources={segment.sources} onClose={() => setSheet(false)} />
       )}
