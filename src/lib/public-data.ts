@@ -8,12 +8,31 @@ export type FeedCursor = { published: string; id: string };
 
 export type FeedPage = { cards: FeedCard[]; next: string | null };
 
-export type StorySummary = {
+export type StorySource = { source: string; title: string; url: string };
+
+export type StorySegment = {
   id: string;
+  headline: string;
+  summary: string;
+  category: string | null;
+  outlets: number;
+  sources: StorySource[];
+  image: StoryImage | null;
+  updated: string;
+};
+
+export type StoryImage = { url: string; credit: string };
+
+export type StoryDeckItem = {
+  id: string;
+  image: StoryImage | null;
   headline: string;
   category: string | null;
   updates: number;
-  lastUpdated: string;
+  outlets: number;
+  updated: string;
+  today: boolean;
+  segments: StorySegment[];
 };
 
 const WHEN = new Intl.DateTimeFormat("en-IN", {
@@ -45,10 +64,67 @@ export function decodeCursor(raw: string): FeedCursor | null {
   return { published, id };
 }
 
+const IST_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+
+const SHORT_DAY = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "numeric",
+  month: "short",
+});
+
+function relativeTime(iso: string, now: number): string {
+  const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return SHORT_DAY.format(new Date(iso));
+}
+
+function httpUrl(url: unknown): string | null {
+  return typeof url === "string" && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function firstImage(p: CardPayload): StoryImage | null {
+  const main = httpUrl(p.image?.url);
+  if (main && p.image) return { url: main, credit: p.image.credit };
+  for (const s of p.sources ?? []) {
+    const url = httpUrl(s.image_url);
+    if (url) return { url, credit: s.source };
+  }
+  return null;
+}
+
+function publicPayload(p: CardPayload): CardPayload {
+  const image = httpUrl(p.image?.url);
+  return {
+    kind: "card",
+    headline: p.headline,
+    summary: p.summary,
+    sentences: p.sentences,
+    category: p.category,
+    published: p.published,
+    sources: (p.sources ?? []).map((s) => ({
+      title: s.title,
+      url: s.url,
+      source: s.source,
+      published: s.published,
+      image_url: httpUrl(s.image_url),
+    })),
+    image: image && p.image ? { url: image, credit: p.image.credit } : null,
+  };
+}
+
+function outletCount(payloads: CardPayload[]): number {
+  return new Set(payloads.flatMap((p) => (p.sources ?? []).map((s) => s.source))).size;
+}
+
 type CardRow = { id: string; payload: CardPayload; published: string };
 
 function toCard(r: CardRow): FeedCard {
-  return { id: r.id, payload: r.payload, updated: formatWhen(r.published) };
+  return { id: r.id, payload: publicPayload(r.payload), updated: formatWhen(r.published) };
 }
 
 export async function getFeed({
@@ -98,7 +174,7 @@ export async function getFeedCategories(): Promise<string[]> {
   return rows.map((r) => r.category as string);
 }
 
-export async function getStories(): Promise<StorySummary[]> {
+export async function getStoryDeck(): Promise<StoryDeckItem[]> {
   const rows = await sql`
     WITH latest AS (
       SELECT DISTINCT ON (i.hidden_meta->>'story_id')
@@ -109,7 +185,7 @@ export async function getStories(): Promise<StorySummary[]> {
       ORDER BY i.hidden_meta->>'story_id', l.created_at DESC, l.slug DESC
     ),
     cards AS (
-      SELECT DISTINCT ON (s.story_id, c.external_id) s.story_id, c.payload
+      SELECT DISTINCT ON (s.story_id, c.external_id) s.story_id, c.id, c.payload
       FROM latest s
       CROSS JOIN LATERAL jsonb_array_elements_text(s.card_ids) AS cid
       JOIN items c ON c.external_id = cid
@@ -117,55 +193,53 @@ export async function getStories(): Promise<StorySummary[]> {
       WHERE c.hidden_meta->>'card_status' = 'active'
       ORDER BY s.story_id, c.external_id, cl.created_at DESC
     )
-    SELECT story_id,
-           count(*)::int AS updates,
-           (array_agg(payload->>'headline'
-              ORDER BY (payload->>'published')::timestamptz DESC))[1] AS headline,
-           (array_agg(payload->>'category'
-              ORDER BY (payload->>'published')::timestamptz DESC))[1] AS category,
-           to_char(max((payload->>'published')::timestamptz) AT TIME ZONE 'UTC',
-                   'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_updated
-    FROM cards
-    GROUP BY story_id
-    HAVING count(*) >= 2
-    ORDER BY max((payload->>'published')::timestamptz) DESC
-  `;
-  return rows.map((r) => ({
-    id: r.story_id,
-    headline: r.headline,
-    category: r.category,
-    updates: r.updates,
-    lastUpdated: formatWhen(r.last_updated),
-  }));
-}
-
-export async function getStoryCards(storyId: string): Promise<FeedCard[] | null> {
-  if (!isUuid(storyId)) return null;
-  const rows = await sql`
-    WITH latest AS (
-      SELECT i.hidden_meta->'card_ids' AS card_ids
-      FROM items i
-      JOIN lists l ON l.id = i.list_id AND l.kind = 'story'
-      WHERE i.hidden_meta->>'story_id' = ${storyId}
-      ORDER BY l.created_at DESC, l.slug DESC
-      LIMIT 1
-    ),
-    cards AS (
-      SELECT DISTINCT ON (c.external_id) c.id, c.payload
-      FROM latest s
-      CROSS JOIN LATERAL jsonb_array_elements_text(s.card_ids) AS cid
-      JOIN items c ON c.external_id = cid
-      JOIN lists cl ON cl.id = c.list_id AND cl.kind = 'card'
-      WHERE c.hidden_meta->>'card_status' = 'active'
-      ORDER BY c.external_id, cl.created_at DESC
-    )
-    SELECT id, payload,
+    SELECT story_id, id, payload,
            to_char((payload->>'published')::timestamptz AT TIME ZONE 'UTC',
                    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published
     FROM cards
-    ORDER BY (payload->>'published')::timestamptz DESC, id DESC
+    ORDER BY story_id, (payload->>'published')::timestamptz, id
   `;
-  return rows.length >= 2 ? rows.map((r) => toCard(r as CardRow)) : null;
+  const now = Date.now();
+  const today = IST_DAY.format(new Date(now));
+  const groups = new Map<string, (CardRow & { story_id: string })[]>();
+  for (const r of rows) {
+    const list = groups.get(r.story_id) ?? [];
+    list.push(r as CardRow & { story_id: string });
+    groups.set(r.story_id, list);
+  }
+  const deck: { item: StoryDeckItem; at: number }[] = [];
+  for (const [id, cards] of groups) {
+    if (cards.length < 2) continue;
+    const payloads = cards.map((c) => c.payload);
+    const latest = cards[cards.length - 1];
+    const at = new Date(latest.published).getTime();
+    deck.push({
+      at,
+      item: {
+        id,
+        image: firstImage(latest.payload),
+        headline: latest.payload.headline,
+        category: latest.payload.category,
+        updates: cards.length,
+        outlets: outletCount(payloads),
+        updated: relativeTime(latest.published, now),
+        today: IST_DAY.format(new Date(at)) === today,
+        segments: cards.map((c) => ({
+          id: c.id,
+          headline: c.payload.headline,
+          summary: c.payload.summary,
+          category: c.payload.category,
+          outlets: outletCount([c.payload]),
+          sources: (c.payload.sources ?? [])
+            .filter((src) => httpUrl(src.url))
+            .map((src) => ({ source: src.source, title: src.title, url: src.url })),
+          image: firstImage(c.payload),
+          updated: relativeTime(c.published, now),
+        })),
+      },
+    });
+  }
+  return deck.sort((a, b) => b.at - a.at).map((d) => d.item);
 }
 
 export const FEED_PAGE = 20;

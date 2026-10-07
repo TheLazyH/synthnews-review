@@ -1,7 +1,10 @@
-import Link from "next/link";
+import type { Viewport } from "next";
 import { notFound } from "next/navigation";
-import CardView from "@/components/card-view";
-import { getStoryCards } from "@/lib/public-data";
+import { getStoryDeck } from "@/lib/public-data";
+import { isUuid } from "@/lib/review-data";
+import StoriesHome from "../stories-home";
+
+export const viewport: Viewport = { viewportFit: "cover" };
 
 export default async function StoryPage({
   params,
@@ -9,24 +12,8 @@ export default async function StoryPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const cards = await getStoryCards(id);
-  if (!cards) notFound();
-  return (
-    <main className="mx-auto max-w-2xl space-y-5 p-4 md:p-6">
-      <Link href="/stories" className="text-sm underline">
-        ← All stories
-      </Link>
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold leading-snug">
-          {cards[0].payload.headline}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {cards.length} updates, newest first
-        </p>
-      </header>
-      {cards.map((card) => (
-        <CardView key={card.id} payload={card.payload} updated={card.updated} />
-      ))}
-    </main>
-  );
+  if (!isUuid(id)) notFound();
+  const stories = await getStoryDeck();
+  if (!stories.some((s) => s.id === id)) notFound();
+  return <StoriesHome stories={stories} openId={id} closeHref="/stories" />;
 }

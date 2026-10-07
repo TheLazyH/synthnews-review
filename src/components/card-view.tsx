@@ -205,9 +205,11 @@ export default function CardView({
   marking = false,
   badSentences = [],
   onToggleSentence,
+  noImages = false,
 }: {
   payload: CardPayload;
   updated: string;
+  noImages?: boolean;
   marking?: boolean;
   badSentences?: number[];
   onToggleSentence?: (n: number) => void;
@@ -218,7 +220,7 @@ export default function CardView({
   return (
     <article className="overflow-hidden rounded-2xl border bg-background shadow-sm">
       <CoverBand
-        images={bandImages(image, sources)}
+        images={noImages ? [] : bandImages(image, sources)}
         headline={headline}
         category={category}
         updated={updated}
