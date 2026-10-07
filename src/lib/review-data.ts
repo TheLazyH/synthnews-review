@@ -1,5 +1,12 @@
 import { sql } from "@/lib/db";
-import type { Progress, ReadItem, ReadList, ReviewItem, StoryItem } from "@/lib/types";
+import type {
+  CardList,
+  Progress,
+  ReadItem,
+  ReadList,
+  ReviewItem,
+  StoryItem,
+} from "@/lib/types";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,30 +43,27 @@ export async function getList(slug: string) {
   return rows[0] ?? null;
 }
 
-export async function getCardLists(): Promise<ReadList[]> {
+export async function getCardLists(): Promise<CardList[]> {
   const rows = await sql`
-    SELECT l.slug, l.title, l.status, count(i.id)::int AS total
+    SELECT l.slug, l.title, l.status, count(i.id)::int AS total,
+           (count(i.id) FILTER (
+             WHERE i.hidden_meta->>'card_status' = 'needs_review'
+           ))::int AS needs_review
     FROM lists l
     LEFT JOIN items i ON i.list_id = l.id
     WHERE l.kind = 'card'
     GROUP BY l.id
     ORDER BY l.slug DESC
   `;
-  return rows as ReadList[];
+  return rows as CardList[];
 }
 
-export async function getCardItems(listId: string, reviewerId: string): Promise<ReadItem[]> {
-  const rows = await sql`
-    SELECT i.id, i.payload, c.id AS feedback_id, c.verdict, c.issues, c.bad_sentences,
-           c.suggested_title, c.suggested_summary, c.note
-    FROM items i
-    LEFT JOIN card_reviews c ON c.item_id = i.id AND c.reviewer_id = ${reviewerId}
-    WHERE i.list_id = ${listId}
-    ORDER BY (i.payload->>'published')::timestamptz DESC, i.position
-  `;
-  return rows.map((r) => ({
+function toReadItem(r: Row): ReadItem {
+  return {
     id: r.id,
     payload: r.payload,
+    status: r.card_status === "needs_review" ? "needs_review" : "active",
+    ...(r.list_title ? { listTitle: r.list_title } : {}),
     feedback: r.feedback_id
       ? {
           verdict: r.verdict,
@@ -70,7 +74,50 @@ export async function getCardItems(listId: string, reviewerId: string): Promise<
           note: r.note,
         }
       : null,
-  }));
+  };
+}
+
+export async function getCardItems(listId: string, reviewerId: string): Promise<ReadItem[]> {
+  const rows = await sql`
+    SELECT i.id, i.payload, i.hidden_meta->>'card_status' AS card_status,
+           c.id AS feedback_id, c.verdict, c.issues, c.bad_sentences,
+           c.suggested_title, c.suggested_summary, c.note
+    FROM items i
+    LEFT JOIN card_reviews c ON c.item_id = i.id AND c.reviewer_id = ${reviewerId}
+    WHERE i.list_id = ${listId}
+    ORDER BY (i.payload->>'published')::timestamptz DESC, i.position
+  `;
+  return rows.map(toReadItem);
+}
+
+export const NEEDS_REVIEW_MAX = 200;
+
+export async function getNeedsReviewItems(
+  reviewerId: string,
+): Promise<{ items: ReadItem[]; total: number }> {
+  const [rows, counts] = await Promise.all([
+    sql`
+      SELECT i.id, i.payload, i.hidden_meta->>'card_status' AS card_status,
+             l.title AS list_title,
+             c.id AS feedback_id, c.verdict, c.issues, c.bad_sentences,
+             c.suggested_title, c.suggested_summary, c.note
+      FROM items i
+      JOIN lists l ON l.id = i.list_id AND l.kind = 'card'
+      LEFT JOIN card_reviews c ON c.item_id = i.id AND c.reviewer_id = ${reviewerId}
+      WHERE i.hidden_meta->>'card_status' = 'needs_review'
+      ORDER BY (c.id IS NULL) DESC,
+               (i.hidden_meta->>'created_at')::timestamptz DESC NULLS LAST,
+               i.id DESC
+      LIMIT ${NEEDS_REVIEW_MAX}
+    `,
+    sql`
+      SELECT count(*)::int AS total
+      FROM items i
+      JOIN lists l ON l.id = i.list_id AND l.kind = 'card'
+      WHERE i.hidden_meta->>'card_status' = 'needs_review'
+    `,
+  ]);
+  return { items: rows.map(toReadItem), total: counts[0].total };
 }
 
 export async function getStoryLists(): Promise<ReadList[]> {

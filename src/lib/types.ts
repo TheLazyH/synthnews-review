@@ -59,6 +59,12 @@ export type ReadList = {
   total: number;
 };
 
+export type CardList = ReadList & { needs_review: number };
+
+export type CardStatus = "active" | "needs_review";
+
+export type StatusFilter = "all" | CardStatus;
+
 export type CardVerdict = "good" | "needs_fix" | "wrong";
 
 export type CardIssue =
@@ -79,6 +85,8 @@ export type MyFeedback = {
 export type ReadItem = {
   id: string;
   payload: CardPayload;
+  status: CardStatus;
+  listTitle?: string;
   feedback: MyFeedback | null;
 };
 

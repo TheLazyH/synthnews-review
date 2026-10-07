@@ -3,21 +3,41 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ShortsNav, { useShortsKeys } from "@/components/shorts-nav";
-import type { MyFeedback, ReadItem } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import type { MyFeedback, ReadItem, StatusFilter } from "@/lib/types";
 import ShortView from "./short-view";
 
 export type ReaderItem = ReadItem & { updated: string };
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "needs_review", label: "Needs review" },
+];
+
+function matches(item: ReaderItem, category: string, status: StatusFilter) {
+  return (
+    (!category || item.payload.category === category) &&
+    (status === "all" || item.status === status)
+  );
+}
 
 export default function Reader({
   title,
   items,
   initialCategory,
   initialId,
+  initialStatus = "all",
+  showStatus = false,
+  note,
 }: {
   title: string;
   items: ReaderItem[];
   initialCategory: string;
   initialId: string;
+  initialStatus?: StatusFilter;
+  showStatus?: boolean;
+  note?: string;
 }) {
   const categories = useMemo(() => {
     const counts = new Map<string, number>();
@@ -31,10 +51,14 @@ export default function Reader({
   const [category, setCategory] = useState(
     categories.some(([c]) => c === initialCategory) ? initialCategory : "",
   );
+  const statusCounts = useMemo(() => {
+    const needs = items.filter((i) => i.status === "needs_review").length;
+    return { all: items.length, active: items.length - needs, needs_review: needs };
+  }, [items]);
+  const [status, setStatus] = useState<StatusFilter>(initialStatus);
   const visible = useMemo(
-    () =>
-      category ? items.filter((i) => i.payload.category === category) : items,
-    [items, category],
+    () => items.filter((i) => matches(i, category, status)),
+    [items, category, status],
   );
   const [index, setIndex] = useState(() =>
     Math.max(
@@ -61,6 +85,7 @@ export default function Reader({
   useEffect(() => {
     const params = new URLSearchParams();
     if (category) params.set("c", category);
+    if (status !== "all") params.set("status", status);
     if (item) params.set("id", item.id);
     const query = params.toString();
     window.history.replaceState(
@@ -68,18 +93,17 @@ export default function Reader({
       "",
       query ? `?${query}` : window.location.pathname,
     );
-  }, [category, item]);
+  }, [category, status, item]);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [item?.id]);
 
-  function changeCategory(next: string) {
-    const nextVisible = next
-      ? items.filter((i) => i.payload.category === next)
-      : items;
+  function changeFilter(nextCategory: string, nextStatus: StatusFilter) {
+    const nextVisible = items.filter((i) => matches(i, nextCategory, nextStatus));
     const keep = item ? nextVisible.findIndex((i) => i.id === item.id) : -1;
-    setCategory(next);
+    setCategory(nextCategory);
+    setStatus(nextStatus);
     setIndex(Math.max(keep, 0));
   }
 
@@ -100,7 +124,7 @@ export default function Reader({
           <h1 className="text-lg font-semibold">{title}</h1>
           <select
             value={category}
-            onChange={(e) => changeCategory(e.target.value)}
+            onChange={(e) => changeFilter(e.target.value, status)}
             aria-label="Filter by category"
             className="h-9 rounded-md border bg-background px-3 text-sm capitalize"
           >
@@ -112,10 +136,28 @@ export default function Reader({
             ))}
           </select>
         </div>
+        {showStatus && (
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((s) => (
+              <Button
+                key={s.value}
+                type="button"
+                size="sm"
+                variant={status === s.value ? "default" : "outline"}
+                aria-pressed={status === s.value}
+                onClick={() => s.value !== status && changeFilter(category, s.value)}
+                className="rounded-full"
+              >
+                {s.label} ({statusCounts[s.value]})
+              </Button>
+            ))}
+          </div>
+        )}
+        {note && <p className="text-sm text-muted-foreground">{note}</p>}
       </header>
 
       {!item ? (
-        <p className="text-sm text-muted-foreground">No shorts in this list.</p>
+        <p className="text-sm text-muted-foreground">No shorts here.</p>
       ) : (
         <ShortView
           key={item.id}

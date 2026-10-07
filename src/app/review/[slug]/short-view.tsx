@@ -145,6 +145,14 @@ export default function ShortView({
 
   return (
     <>
+      {(item.status === "needs_review" || item.listTitle) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {item.status === "needs_review" && (
+            <Badge variant="destructive">Needs review</Badge>
+          )}
+          {item.listTitle && <span>{item.listTitle}</span>}
+        </div>
+      )}
       <CardView
         payload={item.payload}
         updated={item.updated}

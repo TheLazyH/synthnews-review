@@ -22,6 +22,7 @@ export default async function ReviewHome() {
   const cardLists = await getCardLists();
   const storyLists = await getStoryLists();
   const latestStories = storyLists[0];
+  const needsReview = cardLists.reduce((n, l) => n + l.needs_review, 0);
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
@@ -33,7 +34,14 @@ export default async function ReviewHome() {
       </header>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Read News</h2>
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="text-lg font-semibold">Read News</h2>
+          {cardLists.length > 0 && (
+            <Link href="/review/needs-review" className="text-sm underline">
+              Needs review ({needsReview})
+            </Link>
+          )}
+        </div>
         {cardLists.length === 0 && (
           <p className="text-sm text-muted-foreground">
             No shorts yet. Push cards with review_push_cards.py.
@@ -50,6 +58,7 @@ export default async function ReviewHome() {
                 <p className="font-medium">{l.title}</p>
                 <span className="shrink-0 text-sm text-muted-foreground">
                   {l.total} shorts
+                  {l.needs_review > 0 ? ` · ${l.needs_review} needs review` : ""}
                 </span>
               </div>
             </Link>

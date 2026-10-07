@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getCardItems, getList } from "@/lib/review-data";
 import { getSession } from "@/lib/session";
+import type { StatusFilter } from "@/lib/types";
 import Reader, { type ReaderItem } from "./reader";
 
 const UPDATED = new Intl.DateTimeFormat("en-IN", {
@@ -11,15 +12,19 @@ const UPDATED = new Intl.DateTimeFormat("en-IN", {
   minute: "2-digit",
 });
 
+function parseStatus(raw: string | undefined): StatusFilter {
+  return raw === "active" || raw === "needs_review" ? raw : "all";
+}
+
 export default async function ReadPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ c?: string; id?: string }>;
+  searchParams: Promise<{ c?: string; id?: string; status?: string }>;
 }) {
   const { slug } = await params;
-  const { c, id } = await searchParams;
+  const { c, id, status } = await searchParams;
   const session = await getSession();
   const list = await getList(slug);
   if (!list || !session || list.kind !== "card") notFound();
@@ -33,6 +38,8 @@ export default async function ReadPage({
       items={items}
       initialCategory={c ?? ""}
       initialId={id ?? ""}
+      initialStatus={parseStatus(status)}
+      showStatus
     />
   );
 }
