@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LogoutButton from "@/components/logout-button";
 import { getSession } from "@/lib/session";
@@ -20,6 +21,13 @@ export default async function SiteHeader() {
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/search"
+            aria-label="Search"
+            className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Search className="size-5" aria-hidden="true" />
+          </Link>
           {session ? (
             <>
               <Button asChild size="sm" variant="ghost">

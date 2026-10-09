@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Share2 } from "lucide-react";
 import ReportSheet from "@/components/report-sheet";
+import ShareSheet from "@/components/share-sheet";
 import type { CardImage, CardPayload, CardSource } from "@/lib/types";
 
 export function domainChips(sources: CardSource[]) {
@@ -223,6 +225,7 @@ export default function CardView({
   const chips = domainChips(sources);
   const original = sentences.join(" ");
   const [reporting, setReporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   return (
     <article className="overflow-hidden rounded-2xl border bg-background shadow-sm">
       <CoverBand
@@ -288,17 +291,35 @@ export default function CardView({
           </span>
         </div>
         {reportId && (
-          <button
-            type="button"
-            onClick={() => setReporting(true)}
-            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            Report an issue
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setReporting(true)}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Report an issue
+            </button>
+            <button
+              type="button"
+              onClick={() => setSharing(true)}
+              aria-label="Share"
+              className="-mr-2 rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Share2 className="size-5" aria-hidden="true" />
+            </button>
+          </div>
         )}
       </div>
       {reportId && reporting && (
         <ReportSheet cardId={reportId} onClose={() => setReporting(false)} />
+      )}
+      {reportId && sharing && (
+        <ShareSheet
+          path={`/?card=${reportId}`}
+          headline={headline}
+          campaign="card"
+          onClose={() => setSharing(false)}
+        />
       )}
     </article>
   );

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Share2, X } from "lucide-react";
 import ReportSheet from "@/components/report-sheet";
+import ShareSheet from "@/components/share-sheet";
 import type { StoryDeckItem } from "@/lib/public-data";
 import CategoryIcon from "./category-icon";
 import { markSeen } from "./seen";
@@ -54,6 +55,7 @@ export default function StoryViewer({
   const [held, setHeld] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [brokenImage, setBrokenImage] = useState<string | null>(null);
   const press = useRef<Press | null>(null);
@@ -70,7 +72,7 @@ export default function StoryViewer({
 
   const story = stories[pos.story];
   const segment = story.segments[pos.seg];
-  const paused = held || sheet || reporting || hidden;
+  const paused = held || sheet || reporting || sharing || hidden;
   const image =
     segment.image && segment.image.url !== brokenImage ? segment.image : null;
 
@@ -113,7 +115,7 @@ export default function StoryViewer({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (reporting) return;
+      if (reporting || sharing) return;
       if (e.key === "Escape") {
         e.preventDefault();
         if (sheet) setSheet(false);
@@ -235,6 +237,14 @@ export default function StoryViewer({
           </span>
           <button
             type="button"
+            onClick={() => setSharing(true)}
+            aria-label="Share story"
+            className="rounded-full p-2 hover:bg-muted"
+          >
+            <Share2 className="size-5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             aria-label="Close story"
             autoFocus
@@ -314,6 +324,14 @@ export default function StoryViewer({
 
       {reporting && (
         <ReportSheet cardId={segment.id} onClose={() => setReporting(false)} />
+      )}
+      {sharing && (
+        <ShareSheet
+          path={`/stories/${story.id}`}
+          headline={story.headline}
+          campaign="story"
+          onClose={() => setSharing(false)}
+        />
       )}
       {sheet && (
         <SourcesSheet sources={segment.sources} onClose={() => setSheet(false)} />

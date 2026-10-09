@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, readToken } from "@/lib/token";
 
-const PUBLIC_PATH = /^\/(?:stories(?:\/[^/]+)?|api\/feed)?$/;
+const PUBLIC_PATH = /^\/(?:stories(?:\/[^/]+)?|search|api\/(?:feed|search))?$/;
 
 function isPublic(req: NextRequest, path: string) {
   if (req.method === "POST" && path === "/api/report") return true;
@@ -29,6 +29,6 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/auth/login|_next/static|_next/image|_vercel|favicon.ico|robots.txt).*)",
+    "/((?!api/auth/login|_next/static|_next/image|_vercel|favicon.ico|robots.txt|og.png).*)",
   ],
 };

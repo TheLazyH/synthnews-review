@@ -1,6 +1,29 @@
+import type { Metadata } from "next";
 import { isUuid } from "@/lib/review-data";
-import { getFeedAround, getFeedCategories } from "@/lib/public-data";
+import {
+  getFeedAround,
+  getFeedCategories,
+  getPublicCard,
+} from "@/lib/public-data";
+import { shareMetadata } from "@/lib/share-metadata";
 import FeedReader from "./feed-reader";
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ card?: string | string[] }>;
+}): Promise<Metadata> {
+  const { card } = await searchParams;
+  if (typeof card !== "string" || !isUuid(card)) return {};
+  const found = await getPublicCard(card);
+  if (!found) return {};
+  return shareMetadata({
+    title: found.payload.headline,
+    summary: found.payload.summary,
+    checking: found.checking,
+    path: `/?card=${found.id}`,
+  });
+}
 
 export default async function FeedPage({
   searchParams,
