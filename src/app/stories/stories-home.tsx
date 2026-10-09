@@ -76,12 +76,16 @@ export default function StoriesHome({
           <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {rings.map((s) => {
               const done = s.segments.every((seg) => seen.has(seg.id));
+              const label = s.category
+                ? s.category.replace(/\b\w/g, (c) => c.toUpperCase())
+                : "News";
+              const name = `${label}: ${s.headline}`;
               return (
                 <button
                   key={s.id}
                   type="button"
                   onClick={() => show({ group: "rings", id: s.id })}
-                  aria-label={done ? `${s.headline} (seen)` : s.headline}
+                  aria-label={done ? `${name} (seen)` : name}
                   className="flex w-[4.75rem] shrink-0 snap-start flex-col items-center gap-1.5"
                 >
                   <span
@@ -101,7 +105,7 @@ export default function StoriesHome({
                       done ? "text-muted-foreground" : ""
                     }`}
                   >
-                    {s.headline}
+                    {label}
                   </span>
                 </button>
               );

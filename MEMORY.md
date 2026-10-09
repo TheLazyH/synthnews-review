@@ -48,13 +48,41 @@ space from `synthnews-pipeline` and `ingest` — this covers
 - Search engines blocked: `robots: { index: false, follow: false }` in layout
   metadata + `public/robots.txt` disallow all.
 - Public routes (allowlist in `src/proxy.ts`): `/`, `/stories`, `/stories/:id`,
-  `/api/feed`, GET/HEAD only. Every other path and method needs a session
-  (logged-out pages → `/login`, `/api/*` → 401). Server Functions arrive as
-  POSTs to page paths, so public pages must stay GET-only.
-- Public reader shows ONLY cards with `hidden_meta.card_status = 'active'` and
-  selects `payload` only; `hidden_meta` contents never reach the browser.
-- Public stories: latest story-list version per `story_id`; counts and shows
-  only active linked cards; hidden unless ≥ 2 active cards.
+  `/api/feed`, GET/HEAD only — plus `POST /api/report` (exact path; the ONLY
+  public write route, since 2026-10-07). Every other path and method needs a
+  session (logged-out pages → `/login`, `/api/*` → 401). Server Functions arrive
+  as POSTs to page paths, so public pages must stay GET-only.
+- Proxy matcher excludes `api/auth/login`, `_next/static`, `_next/image`,
+  `_vercel` (Vercel Web Analytics), `favicon.ico`, `robots.txt`.
+- Public cards (since 2026-10-07): `card_status IN ('active','needs_review')`.
+  The browser gets only a boolean `checking` (true = needs_review), shown as the
+  muted line "Some details still being checked" under the summary (feed card
+  and story viewer). `card_status` and every other `hidden_meta` field never
+  reach the browser. SUPERSEDED: active-only (2026-10-05 → 2026-10-07).
+- Public payload is an explicit allowlist (`publicPayload` in `public-data.ts`):
+  kind, headline, summary, sentences, category, published, sources
+  `{title,url,source,published,image_url}`, image. URLs not http(s) → null/dropped.
+- Public server code may READ story `hidden_meta.story_id` and `card_ids` as join
+  keys; only `story_id` (the `/stories/:id` URL) may be sent to the browser.
+- Public stories: latest story-list version per `story_id`; hidden unless ≥ 2
+  linked cards (active or needs_review). "Today" = latest card's
+  `payload.published` date in Asia/Kolkata (not `hidden_meta.created_at`).
+- Publisher images ARE allowed on public preview pages (tester-only, noindex),
+  always credited "Image: <outlet>". External images use
+  `referrerPolicy="no-referrer"`; lazy except the first feed cover image and the
+  story viewer's current segment. SUPERSEDED same day (2026-10-07): "no
+  publisher images on public pages". `CardView` keeps an unused `noImages` prop.
+- Public wording: never the word "verified" in UI copy.
+- Anonymous reports (`POST /api/report`): body `{card_id, reason
+  wrong_fact|missing_context|outdated|other, note ≤ 280 trimmed, hp}`; requires
+  `Content-Type: application/json` and `Origin` host = request host; body ≤ 2 KB;
+  honeypot must be empty; card must be publicly visible. 202 `{ok}` / 400
+  `{error}` / 429 (≥ 20 per visitor per hour, or ≥ 1000 overall per hour) / 503
+  if `REPORT_SALT` unset. Visitor key = HMAC-SHA256(ip + "\n" + UA,
+  `REPORT_SALT`); ip = first `x-forwarded-for`, else `x-real-ip`. Raw IP/UA
+  never stored. Route never touches the session.
+- Analytics: Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/next`
+  in the root layout), cookieless.
 - Light mode only (no dark toggle). Text-size control kept.
 - Code style: no comments or docstrings in delivered code (eslint-disable
   lines excepted). No hard-coded word
@@ -121,6 +149,13 @@ card: verdict `good|needs_fix|wrong`, issues[], bad_sentences[],
 suggested_title/summary, note. story: verdict
 `good|wrong_link|series_not_story|missing_link`, bad_entries[], note.
 
+### `card_reports` (added 2026-10-07, applied by hand)
+id uuid PK · card_id FK items (cascade) · reason CHECK
+`wrong_fact|missing_context|outdated|other` · note CHECK NULL or ≤ 280 chars ·
+visitor_hash (HMAC hex) · created_at · index `card_reports_visitor_idx`
+(visitor_hash, created_at) · index `card_reports_card_idx` (card_id) — the
+card index is in `schema.sql` but was NOT present in Neon as of 2026-10-07.
+
 ### `reviews`
 id uuid PK · item_id FK (cascade) · reviewer_id FK · relation · is_opinion ·
 confidence · skipped · skip_reason · note (≤1000 chars) · time_spent_ms
@@ -132,6 +167,8 @@ CHECK skipped ⇔ relation IS NULL
   `synthnews-pipeline/data/labels/pairs_20260929.csv`.
 - As of 2026-10-05: 5 pair lists, 8 card lists (236 cards, 167 active),
   3 story lists (24 stories, 10 with ≥ 2 active cards).
+- As of 2026-10-07: 414 card items, all with `sources[].image_url`;
+  `payload.image` null on all; ~17 needs_review cards per day.
 - Reviewers: `harshitsahni20@gmail.com` (Harshit, admin). Second reviewer to be
   registered.
 
@@ -149,6 +186,7 @@ CHECK skipped ⇔ relation IS NULL
 | `synthnews-review/.env.local` (git-ignored) | `DATABASE_URL` | Neon pooled string |
 | same | `SESSION_SECRET` | `openssl rand -base64 32` |
 | Vercel project settings | both of the above | same values |
+| `.env.local` + Vercel (prod + preview) | `REPORT_SALT` | random secret; missing → `/api/report` 503; rotating it unlinks old visitor hashes |
 | `synthnews-pipeline/.env` | `REVIEW_DATABASE_URL` | Neon pooled string |
 
 ### GitHub
@@ -175,23 +213,32 @@ CHECK skipped ⇔ relation IS NULL
 ### Local dev
 - `cd ~/Documents/synthnews/synthnews-review && npm run dev` → `http://localhost:3000`.
 - `npm run build` must pass before pushing (catches type errors).
+- LAN testing from a phone: `next.config.ts` `allowedDevOrigins: ["192.168.1.18"]`
+  (bare hostname, no scheme/port). Without it the dev server blocks `/_next/hmr`
+  etc. and client JS never runs. Update if the Mac's LAN IP changes.
 
 ## 6. CODEBASE MAP (`synthnews-review/`)
 ```
 db/schema.sql                         schema source of truth
 public/robots.txt                     disallow all
-next.config.ts                        redirects: /read/:path* → /review/:path*, /lists/:slug → /review/pairs/:slug
+next.config.ts                        redirects: /read/:path* → /review/:path*, /lists/:slug → /review/pairs/:slug;
+                                      allowedDevOrigins (LAN dev)
 src/proxy.ts                          route guard + public allowlist (Next 16: proxy.ts / export proxy)
 src/lib/db.ts                         neon() sql client
 src/lib/token.ts                      JWT sign/verify, SESSION_COOKIE (edge-safe, no next/headers)
 src/lib/session.ts                    create/get/clear session via cookies()
 src/lib/types.ts                      pair, card, story payload + feedback types
-src/lib/review-data.ts                review queries (lists, items + my feedback), isUuid
+src/lib/review-data.ts                review queries (lists + needs_review counts, items + my feedback +
+                                      card_status + report count/latest 20 reports, getNeedsReviewItems), isUuid
 src/lib/public-data.ts                public queries: getFeed (keyset), getFeedAround, getFeedCategories,
-                                      getStories, getStoryCards, parseFeedQuery
-src/app/layout.tsx                    metadata (noindex), PREFS_SCRIPT (text size), SiteHeader, ReadingControls
+                                      getStoryDeck, parseFeedQuery; publicPayload allowlist; relative times
+                                      (SUPERSEDED: getStories, getStoryCards)
+src/app/layout.tsx                    metadata (noindex), PREFS_SCRIPT (text size), SiteHeader, ReadingControls,
+                                      GlobalLoader, Vercel <Analytics />
 src/components/site-header.tsx        SynthNews · Feed · Stories · Login | Review + Logout
-src/components/card-view.tsx          shared card: category band + image carousel, headline, sentences, source chips
+src/components/card-view.tsx          shared card: category band + image carousel, headline, sentences, source chips;
+                                      props noImages (unused), checking (public line), reportId (public report link)
+src/components/report-sheet.tsx       public "Report an issue" bottom sheet → POST /api/report
 src/components/shorts-nav.tsx         ShortsNav (fixed ↑/↓) + useShortsKeys (arrows; j/k opt-in)
 src/components/logout-button.tsx      Logout
 src/components/reading-controls.tsx   text size (100/112/125%)
@@ -200,13 +247,27 @@ PUBLIC
 src/app/page.tsx                      / — server: categories + getFeedAround(?category, ?card)
 src/app/feed-reader.tsx               one-card shorts reader: chips, prefetch, caught-up, wheel/swipe/keys,
                                       sessionStorage restore
-src/app/stories/page.tsx              /stories — stories with ≥ 2 active cards
-src/app/stories/[id]/page.tsx         /stories/:story_id — active cards, newest first
-src/app/api/feed/route.ts             GET only; ?category ?cursor ?limit (≤ 50); bad input → 400
+src/app/stories/page.tsx              /stories (+ ?s=<story_id> opens viewer) — Instagram-style StoriesHome
+src/app/stories/[id]/page.tsx         /stories/:story_id deep link → viewer open; close → router.replace("/stories")
+src/app/stories/stories-home.tsx      rings (stories updated today, IST) + rows (rest); history.pushState ?s= so
+                                      phone back closes the viewer
+src/app/stories/story-viewer.tsx      full-screen viewer: segments oldest→newest, progress bars, tap thirds,
+                                      hold = pause, swipe down/Esc close, arrows; segment time
+                                      clamp(5s + 0.25s/word, 6s, 20s); no auto-advance with reduced motion
+src/app/stories/story-thumb.tsx       image (next/image unoptimized) or black category tile on error/null
+src/app/stories/sources-sheet.tsx     outlets bottom sheet; category-icon.tsx (lucide); seen.ts (localStorage
+                                      `storiesSeen`, try/catch, useSyncExternalStore)
+src/app/api/feed/route.ts             GET only; ?category ?cursor ?limit (≤ 50); bad input → 400;
+                                      card = {id, payload, updated, checking}
+src/app/api/report/route.ts           POST only, public; see §2 anonymous reports
 
 REVIEW (login)
-src/app/review/page.tsx               dashboard: card dates, story lists, pair lists
-src/app/review/[slug]/                card reader with verdicts (reader.tsx, short-view.tsx)
+src/app/review/page.tsx               dashboard: card dates (+ "N needs review"), "Needs review (N)" link,
+                                      story lists, pair lists
+src/app/review/[slug]/                card reader with verdicts (reader.tsx, short-view.tsx); status chips
+                                      ?status=all|active|needs_review|reported; badges + reader reports list
+src/app/review/needs-review/page.tsx  all needs_review cards across lists, unlabelled first, newest
+                                      hidden_meta.created_at first, cap 200
 src/app/review/stories/               story lists + timeline review
 src/app/review/pairs/[slug]/page.tsx  pair list: progress, Start/Continue, skipped, CSV, guide
 src/app/review/pairs/[slug]/run/      pair review screen (mode=new|skipped)
@@ -226,12 +287,15 @@ src/app/api/read/items/[id]/story-feedback POST story verdict
 - Browser prefs in localStorage: `textScale` (`100|112|125`), applied pre-paint by
   `PREFS_SCRIPT` (hence `suppressHydrationWarning` on `<html>`). `theme` is
   no longer read (SUPERSEDED: dark mode removed 2026-10-05).
-- Feed reader state in sessionStorage `feed-state:v1` (category, loaded cards,
-  next cursor, index, savedAt; 30-min expiry). URL mirrors `?category=&card=`.
+- Feed reader state in sessionStorage `feed-state:v3` (category, loaded cards,
+  next cursor, index, savedAt; 30-min expiry, refreshed on every save). URL
+  mirrors `?category=&card=`. Bump the key whenever the card shape changes
+  (v1 → v2 images, v2 → v3 `checking`), or old snapshots replace fresh data.
 - Feed cursor = `<published ISO, microseconds, UTC>_<items.id>`; order
   `published DESC, id DESC`.
-- Images: plain `<img>` with `referrerPolicy="no-referrer"` (publisher hotlinks),
-  not `next/image`.
+- Images: `card-view.tsx` uses plain `<img>` (eslint-disable line);
+  stories use `next/image` with `unoptimized` + `fill` (no remotePatterns needed,
+  no lint warning, re-fires pre-hydration onError). All `referrerPolicy="no-referrer"`.
 - Card accents: A = `border-l-sky-500`, B = `border-l-amber-500`.
 
 ## 7. PIPELINE-SIDE PIECES (`synthnews-pipeline/`)
@@ -272,8 +336,21 @@ PYTHONPATH=. uv run python scripts/review_push.py data/labels/pairs_YYYYMMDD.csv
 - Public feed does not collapse cards of the same story, and does not
   de-duplicate a card that appears in two card lists (none today).
 - Deep link `?card=` is only found within the first 200 cards of a category.
-- `npm run lint` has 13 known problems in older files (react-hooks purity /
+- `npm run lint` has 12 known problems in older files (react-hooks purity /
   set-state-in-effect, unescaped quotes, one `any`); new code lints clean.
+  (Was 13 until the unused `Badge` import in short-view.tsx was used, 2026-10-07.)
+- Bad `/stories/:id` (and other not-found pages) return 200 with the not-found
+  UI (soft 404): root `src/app/loading.tsx` starts streaming before
+  `notFound()`. Fix: move loading.tsx out of root (route groups). Pages are
+  noindex, so low impact.
+- Create `card_reports_card_idx` in Neon (missing as of 2026-10-07).
+- `card_reports.visitor_hash` retention: proposed clearing after 30 days
+  (periodic job) — not built.
+- Card status is a snapshot from push time. When the pipeline kill-switch lands
+  (week 2), the kill script must also update Neon `hidden_meta.card_status`, or
+  killed cards stay public and reviewable.
+- Stories viewer: URL keeps the first story's `?s=` while auto-advancing to
+  later stories.
 - `guide_md` is shown as plain text, not rendered Markdown.
 - Sampler CSV has no URL columns (push fetches them); add `a_url`/`b_url` to the
   sampler if CSVs are ever reviewed outside the app.
@@ -311,5 +388,18 @@ PYTHONPATH=. uv run python scripts/review_push.py data/labels/pairs_YYYYMMDD.csv
   sets state before awaiting.
 - JS `Date` rolls invalid dates over (Feb 30 → Mar 2) where Postgres errors →
   validate user dates by round-trip (`toISOString()` equals input).
+- Checking jsonb with `payload::text LIKE '%"key":"%'` silently matches nothing:
+  jsonb text output has a space after the colon (`"key": "v"`). Use jsonb
+  operators (`jsonb_array_elements`, `?`, `->>`) for data checks.
+- zsh does not word-split unquoted `$VAR`: `curl $HEADERS` passes one argument.
+  Use bash arrays (`"${H[@]}"`) or explicit `-H` flags in test scripts.
+- A function exported from a `"use client"` module cannot be called from a
+  server component (it becomes a client reference) — keep shared parsers in
+  server/plain modules.
+- localStorage-backed UI state: read via `useSyncExternalStore` (server snapshot
+  "") instead of setState in an effect — avoids hydration mismatch and the
+  `set-state-in-effect` lint error.
+- Native `history.pushState` integrates with the Next router (syncs
+  `useSearchParams`); safe for viewer-style `?s=` entries.
 - Neon offers optional CLI onboarding (`neon login`, `neon mcp`, `neon deploy`) —
   NOT used; only the pooled connection string is needed.
